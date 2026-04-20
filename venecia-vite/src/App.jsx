@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ─── PALETA VENECIA ──────────────────────────────────────────────────────────
 const C = {
@@ -698,21 +698,17 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       total, costo_total: carrito.reduce((s, i) => s + calcularCosto(i, data.insumos) * i.cantidad, 0),
       formaPago, recibido: recibido ? Number(recibido) : 0, vuelto: recibido && Number(recibido) > total ? Number(recibido) - total : 0,
     };
-    setData((prev) => {
+    var consumoObj = formaPago === "consumo" ? {
+      id: nuevaVenta.id, fecha: nuevaVenta.fecha, hora: nuevaVenta.hora,
+      usuarioId: sesion.usuario.id, usuarioNombre: sesion.usuario.nombre,
+      sucursalNombre: sesion.sucursal.nombre,
+      items: nuevaVenta.items, total: nuevaVenta.total, cajaId: caja.id,
+    } : null;
+    guardarVenta(nuevaVenta);
+    if (consumoObj) guardarConsumo(consumoObj);
+    setData(function(prev) {
       var next = { ...prev, ventas: [...prev.ventas, nuevaVenta] };
-      if (formaPago === "consumo") {
-        next.consumosEmpleado = [...prev.consumosEmpleado, {
-          id: nuevaVenta.id,
-          fecha: nuevaVenta.fecha,
-          hora: nuevaVenta.hora,
-          usuarioId: sesion.usuario.id,
-          usuarioNombre: sesion.usuario.nombre,
-          sucursalNombre: sesion.sucursal.nombre,
-          items: nuevaVenta.items,
-          total: nuevaVenta.total,
-          cajaId: caja.id,
-        }];
-      }
+      if (consumoObj) next.consumosEmpleado = [...prev.consumosEmpleado, consumoObj];
       return next;
     });
     setTicketVenta(nuevaVenta);
@@ -737,6 +733,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       motivo: retiroMotivo,
       monto: Number(retiroMonto),
     };
+    guardarRetiro(nuevoRetiro);
     setData(function(prev) {
       return { ...prev, retiros: [...prev.retiros, nuevoRetiro] };
     });
@@ -748,10 +745,10 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const handleCerrarCaja = () => {
     const horaCierre = ahora();
     const cajaCerrada = { ...caja, horaCierre, cerrada: true, ventas: ventasCaja };
-    setData(prev => ({
-      ...prev,
-      cajas: prev.cajas.map(c => c.id === caja.id ? { ...c, horaCierre, cerrada: true } : c)
-    }));
+    cerrarCaja(caja.id, horaCierre);
+    setData(function(prev) {
+      return { ...prev, cajas: prev.cajas.map(function(c) { return c.id === caja.id ? { ...c, horaCierre, cerrada: true } : c; }) };
+    });
     setTicketCierre(cajaCerrada);
     setMostrarCierre(false);
   };
@@ -1860,10 +1857,11 @@ function TabVentas({ data }) {
                 if (editForm.items.length === 0) return;
                 var nuevoTotal = editForm.items.reduce(function(s,it){return s+it.subtotal;},0);
                 var nuevoCosto = editForm.items.reduce(function(s,it){return s+(it.costo||0)*it.cantidad;},0);
+                actualizarVenta(ventaEditando.id, { items: editForm.items, formaPago: editForm.formaPago, total: nuevoTotal, costo_total: nuevoCosto });
                 setData(function(prev) {
                   return { ...prev, ventas: prev.ventas.map(function(v) {
                     if (v.id !== ventaEditando.id) return v;
-                    return {...v, items:editForm.items, formaPago:editForm.formaPago, total:nuevoTotal, costo_total:nuevoCosto, editada:true};
+                    return {...v, items:editForm.items, formaPago:editForm.formaPago, forma_pago:editForm.formaPago, total:nuevoTotal, costo_total:nuevoCosto, editada:true};
                   })};
                 });
                 setVentaEditando(null); setEditForm(null);
@@ -2315,18 +2313,25 @@ function TabInsumos({ data, setData }) {
 
   const guardar = () => {
     if (!form.nombre || !form.costo) return;
-    setData(prev => {
-      if (editando === "nuevo") return { ...prev, insumos: [...prev.insumos, { id: Date.now(), nombre: form.nombre, costo: Number(form.costo) }] };
-      // Al actualizar insumo, recalcular costos de productos con receta automáticamente
-      return { ...prev, insumos: prev.insumos.map(i => i.id === editando ? { ...i, nombre: form.nombre, costo: Number(form.costo) } : i) };
-    });
+    var insData = { nombre: form.nombre, costo: Number(form.costo) };
+    if (editando === "nuevo") {
+      guardarInsumo(insData).then(function(nuevo) {
+        setData(function(prev) { return { ...prev, insumos: [...prev.insumos, { id: nuevo ? nuevo.id : Date.now(), ...insData }] }; });
+      });
+    } else {
+      guardarInsumo({ ...insData, id: editando });
+      setData(function(prev) { return { ...prev, insumos: prev.insumos.map(function(i) { return i.id === editando ? { ...i, ...insData } : i; }) }; });
+    }
     setEditando(null);
   };
 
   const eliminar = (id) => {
     const usado = data.productos.some(p => p.receta && p.receta.some(r => r.insumoId === id));
     if (usado) { alert("Este insumo está siendo usado en la receta de uno o más productos. Quitalo de las recetas antes de eliminarlo."); return; }
-    if (window.confirm("¿Eliminar este insumo?")) setData(prev => ({ ...prev, insumos: prev.insumos.filter(i => i.id !== id) }));
+    if (window.confirm("¿Eliminar este insumo?")) {
+      eliminarInsumo(id);
+      setData(function(prev) { return { ...prev, insumos: prev.insumos.filter(function(i) { return i.id !== id; }) }; });
+    }
   };
 
   const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 12, border: `2px solid ${C.violetaLight}`, fontSize: 14, fontFamily: "Nunito, sans-serif", fontWeight: 600, boxSizing: "border-box", outline: "none" };
@@ -2574,15 +2579,27 @@ function TabProductos({ data, setData }) {
   const guardar = () => {
     if (!form.nombre || !form.precio) return;
     const costoFinal = costoCalculado(form);
-    setData(prev => {
-      const prod = { nombre: form.nombre, precio: Number(form.precio), costo: costoFinal, stockKg: Number(form.stockKg) || 0, emoji: form.emoji, categoria: form.categoria, tipoCosto: form.tipoCosto, receta: form.tipoCosto === "receta" ? form.receta : [], activo: true };
-      if (editando === "nuevo") return { ...prev, productos: [...prev.productos, { id: Date.now(), ...prod }] };
-      return { ...prev, productos: prev.productos.map(p => p.id === editando ? { ...p, ...prod } : p) };
-    });
+    var prodData = { nombre: form.nombre, precio: Number(form.precio), costo: costoFinal, stockKg: Number(form.stockKg) || 0, emoji: form.emoji, categoria: form.categoria, tipoCosto: form.tipoCosto, receta: form.tipoCosto === "receta" ? form.receta : [], activo: true };
+    if (editando === "nuevo") {
+      var tempId = Date.now();
+      guardarProducto({ ...prodData, id: null }).then(function(nuevo) {
+        var finalId = nuevo ? nuevo.id : tempId;
+        setData(function(prev) { return { ...prev, productos: [...prev.productos, { id: finalId, ...prodData }] }; });
+      });
+    } else {
+      guardarProducto({ ...prodData, id: editando });
+      setData(function(prev) { return { ...prev, productos: prev.productos.map(function(p) { return p.id === editando ? { ...p, ...prodData } : p; }) }; });
+    }
     setEditando(null);
   };
 
-  const toggleActivo = (id) => setData(prev => ({ ...prev, productos: prev.productos.map(p => p.id === id ? { ...p, activo: !p.activo } : p) }));
+  const toggleActivo = function(id) {
+    var prod = data.productos.find(function(p) { return p.id === id; });
+    if (!prod) return;
+    var nuevoActivo = !prod.activo;
+    guardarProducto({ ...prod, activo: nuevoActivo, id: id });
+    setData(function(prev) { return { ...prev, productos: prev.productos.map(function(p) { return p.id === id ? { ...p, activo: nuevoActivo } : p; }) }; });
+  };
 
   // Recalcular costos de receta al cambiar insumos
   const productosConCosto = data.productos.map(p => ({ ...p, costoReal: calcularCosto(p, data.insumos) }));
@@ -2821,11 +2838,15 @@ function TabUsuarios({ data, setData }) {
 
   const guardar = () => {
     if (!form.nombre || !form.clave) return;
-    setData((prev) => {
-      const nuevo = { ...form, sucursal_id: form.sucursal_id ? Number(form.sucursal_id) : null };
-      if (editando === "nuevo") return { ...prev, usuarios: [...prev.usuarios, { id: Date.now(), ...nuevo }] };
-      return { ...prev, usuarios: prev.usuarios.map((u) => u.id === editando ? { ...u, ...nuevo } : u) };
-    });
+    var usuData = { ...form, sucursal_id: form.sucursal_id ? Number(form.sucursal_id) : null };
+    if (editando === "nuevo") {
+      guardarUsuario(usuData).then(function(nuevo) {
+        setData(function(prev) { return { ...prev, usuarios: [...prev.usuarios, { id: nuevo ? nuevo.id : Date.now(), ...usuData }] }; });
+      });
+    } else {
+      guardarUsuario({ ...usuData, id: editando });
+      setData(function(prev) { return { ...prev, usuarios: prev.usuarios.map(function(u) { return u.id === editando ? { ...u, ...usuData } : u; }) }; });
+    }
     setEditando(null);
   };
 
@@ -2920,15 +2941,34 @@ function TabUsuarios({ data, setData }) {
 export default function App() {
   const [data, setData] = useState(INITIAL_DATA);
   const [sesion, setSesion] = useState(null);
-  const [cajaActiva, setCajaActiva] = useState(null); // null = no abrió caja aún
+  const [cajaActiva, setCajaActiva] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
-  const handleLogin = (s) => {
+  // Cargar datos desde Supabase al iniciar
+  useEffect(function() {
+    cargarDatos().then(function(datos) {
+      setData(datos);
+      setCargando(false);
+    }).catch(function() {
+      setCargando(false);
+    });
+  }, []);
+
+  // Recargar datos cada 30 segundos (para ver cambios de otras sucursales)
+  useEffect(function() {
+    var interval = setInterval(function() {
+      cargarDatos().then(function(datos) { setData(datos); });
+    }, 30000);
+    return function() { clearInterval(interval); };
+  }, []);
+
+  const handleLogin = function(s) {
     setSesion(s);
     setCajaActiva(null);
   };
 
-  const handleAbrirCaja = (montoInicial) => {
-    const nuevaCaja = {
+  const handleAbrirCaja = async function(montoInicial) {
+    var nuevaCaja = {
       id: Date.now(),
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
@@ -2938,22 +2978,29 @@ export default function App() {
       horaApertura: ahora(),
       horaCierre: null,
       montoInicial,
-      ventas: [],
       cerrada: false,
     };
-    setData(prev => ({ ...prev, cajas: [...prev.cajas, nuevaCaja] }));
+    await guardarCaja(nuevaCaja);
+    setData(function(prev) { return { ...prev, cajas: [...prev.cajas, { ...nuevaCaja, sucursal_id: nuevaCaja.sucursalId, hora_apertura: nuevaCaja.horaApertura }] }; });
     setCajaActiva(nuevaCaja);
   };
 
-  const handleCerrarCaja = () => {
+  const handleCerrarCaja = function() {
     setCajaActiva(null);
     setSesion(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = function() {
     setSesion(null);
     setCajaActiva(null);
   };
+
+  if (cargando) return (
+    <div style={{ minHeight:"100vh", background:"#5B2D8E", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
+      <div style={{ fontSize:60 }}>🍦</div>
+      <div style={{ color:"white", fontSize:20, fontFamily:"sans-serif", fontWeight:700 }}>Cargando Venecia...</div>
+    </div>
+  );
 
   if (!sesion) return <Login data={data} onLogin={handleLogin} />;
   if (sesion.usuario.rol === "admin") return <Admin data={data} setData={setData} onLogout={handleLogout} />;
