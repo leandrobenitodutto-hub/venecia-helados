@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-
+import { cargarDatos, guardarVenta, actualizarVenta, guardarCaja, cerrarCaja, guardarRetiro, guardarConsumo, guardarProducto, guardarInsumo, eliminarInsumo, guardarUsuario, eliminarUsuario } from "./supabase";
 // ─── PALETA VENECIA ──────────────────────────────────────────────────────────
 const C = {
   violeta: "#5B2D8E",
