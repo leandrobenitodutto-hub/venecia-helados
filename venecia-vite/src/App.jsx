@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { cargarDatos, guardarVenta, actualizarVenta, guardarCaja, cerrarCaja, guardarRetiro, guardarConsumo, guardarProducto, guardarInsumo, eliminarInsumo, guardarUsuario, eliminarUsuario } from "./supabase";
+
 // ─── PALETA VENECIA ──────────────────────────────────────────────────────────
 const C = {
   violeta: "#5B2D8E",
@@ -280,8 +280,18 @@ function TicketModal({ venta, sucursal, usuario, onClose }) {
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#777", marginBottom:3 }}>
             <span>Forma de pago</span>
-            <span style={{ fontWeight:700 }}>{venta.formaPago === "efectivo" ? "Efectivo" : venta.formaPago === "tarjeta" ? "Tarjeta" : "QR"}</span>
+            <span style={{ fontWeight:700 }}>
+              {venta.formaPago === "mixto" ? "Pago mixto" : venta.formaPago === "efectivo" ? "Efectivo" : venta.formaPago === "tarjeta" ? "Tarjeta" : venta.formaPago === "qr" ? "QR" : "Consumo"}
+            </span>
           </div>
+          {venta.pagosMixtos && venta.pagosMixtos.map(function(p,i) {
+            var lb = {efectivo:"💵 Efectivo", tarjeta:"💳 Tarjeta", qr:"📱 QR"};
+            return (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#888", marginBottom:2 }}>
+                <span>{lb[p.medio]||p.medio}</span><span style={{ fontWeight:700 }}>{fmt(Number(p.monto))}</span>
+              </div>
+            );
+          })}
           {venta.formaPago === "efectivo" && venta.vuelto > 0 && (
             <div style={{ background:C.mentaPale, borderRadius:10, padding:"8px 12px", marginTop:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
@@ -659,6 +669,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [ticketVenta, setTicketVenta] = useState(null);
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [paso, setPaso] = useState("productos");
+  const [pagos, setPagos] = useState([]); // [{medio, monto}]
   const [catActiva, setCatActiva] = useState("productos");
   const [mostrarCierre, setMostrarCierre] = useState(false);
   const [ticketCierre, setTicketCierre] = useState(null);
@@ -686,6 +697,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const confirmarVenta = () => {
     if (!formaPago) return;
     // monto recibido es opcional en efectivo
+    // Determinar forma de pago final
+    var formaPagoFinal = formaPago;
+    var pagosMixtos = null;
+    if (hayPagos) {
+      formaPagoFinal = "mixto";
+      pagosMixtos = pagos;
+    }
     const nuevaVenta = {
       id: Date.now(), fecha: hoy(), hora: ahora(),
       cajaId: caja.id,
@@ -696,7 +714,10 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         return { id: i.id, nombre: i.nombre, cantidad: i.cantidad, precio: i.precio, costo: costoReal, subtotal: i.subtotal, costo_total: costoReal * i.cantidad };
       }),
       total, costo_total: carrito.reduce((s, i) => s + calcularCosto(i, data.insumos) * i.cantidad, 0),
-      formaPago, recibido: recibido ? Number(recibido) : 0, vuelto: recibido && Number(recibido) > total ? Number(recibido) - total : 0,
+      formaPago: formaPagoFinal,
+      pagosMixtos: pagosMixtos,
+      recibido: recibido ? Number(recibido) : 0,
+      vuelto: recibido && Number(recibido) > total ? Number(recibido) - total : 0,
     };
     var consumoObj = formaPago === "consumo" ? {
       id: nuevaVenta.id, fecha: nuevaVenta.fecha, hora: nuevaVenta.hora,
@@ -712,10 +733,15 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       return next;
     });
     setTicketVenta(nuevaVenta);
-    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos");
+    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]);
   };
 
-  const pagoOk = formaPago !== "";
+  // Calcular totales de pagos mixtos
+  var totalPagado = pagos.reduce(function(s, p) { return s + Number(p.monto || 0); }, 0);
+  var saldoPendiente = total - totalPagado;
+  var hayPagos = pagos.length > 0;
+  // pagoOk: si hay pagos mixtos que cubren el total, o si hay un medio simple seleccionado
+  var pagoOk = (hayPagos && saldoPendiente <= 0) || (!hayPagos && formaPago !== "");
 
   var retirosCaja = data.retiros.filter(function(r) { return r.cajaId === caja.id; });
   var totalRetiros = retirosCaja.reduce(function(s, r) { return s + r.monto; }, 0);
@@ -974,50 +1000,123 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
             </div>
           ) : (
             <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
-              <p style={{ fontSize: 11, color: C.violetaMed, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Forma de pago</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                {[
-                  { key: "efectivo", label: "💵 Efectivo" },
-                  { key: "tarjeta", label: "💳 Tarjeta / Débito" },
-                  { key: "qr", label: "📱 QR / Transferencia" },
-                  { key: "consumo", label: "👤 Consumo empleado" },
-                ].map((fp) => (
-                  <button key={fp.key} onClick={() => setFormaPago(fp.key)}
-                    style={{
-                      padding: "12px 14px", borderRadius: 12,
-                      border: formaPago === fp.key ? "3px solid " + C.violeta : "3px solid " + C.violetaPale,
-                      background: formaPago === fp.key ? C.violetaPale : C.blanco,
-                      color: formaPago === fp.key ? C.violeta : "#555",
-                      fontWeight: formaPago === fp.key ? 800 : 600,
-                      cursor: "pointer", fontSize: 14, textAlign: "left",
-                      fontFamily: "Nunito, sans-serif",
-                      transition: "all 0.15s",
-                    }}>
-                    {fp.label}
-                  </button>
-                ))}
+              <p style={{ fontSize: 11, color: C.violetaMed, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Forma de pago</p>
+
+              {/* Modo pago único o mixto */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <button onClick={function() { setPagos([]); setFormaPago(""); }}
+                  style={{ flex:1, padding:"7px", borderRadius:10, border: !hayPagos ? "2px solid " + C.violeta : "2px solid " + C.violetaLight,
+                    background: !hayPagos ? C.violetaPale : C.blanco, color: C.violeta, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif" }}>
+                  Un medio
+                </button>
+                <button onClick={function() { setFormaPago("mixto"); if(pagos.length===0) setPagos([{medio:"efectivo", monto:""}, {medio:"qr", monto:""}]); }}
+                  style={{ flex:1, padding:"7px", borderRadius:10, border: hayPagos ? "2px solid " + C.violeta : "2px solid " + C.violetaLight,
+                    background: hayPagos ? C.violetaPale : C.blanco, color: C.violeta, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif" }}>
+                  Pago mixto
+                </button>
               </div>
-              {formaPago === "efectivo" && (
-                <div>
-                  <label style={{ fontSize: 11, color: C.violetaMed, fontWeight: 800, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Monto recibido (opcional — para calcular vuelto)</label>
-                  <input type="number" value={recibido} onChange={(e) => setRecibido(e.target.value)} placeholder="Opcional"
-                    style={{ width: "100%", padding: "12px", borderRadius: 12, border: `2px solid ${C.violetaLight}`, fontSize: 18, fontWeight: 900, color: C.violeta, boxSizing: "border-box", fontFamily: "Nunito, sans-serif", outline: "none" }} />
-                  {recibido && Number(recibido) >= total && (
-                    <div style={{ marginTop: 8, padding: "10px 14px", background: C.mentaPale, borderRadius: 10, color: "#2a7a5e", fontWeight: 800, fontSize: 15, display: "flex", justifyContent: "space-between" }}>
-                      <span>Vuelto:</span><span>{fmt(vuelto)}</span>
+
+              {/* PAGO ÚNICO */}
+              {!hayPagos && (
+                <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+                  {[
+                    { key:"efectivo", label:"💵 Efectivo" },
+                    { key:"tarjeta", label:"💳 Tarjeta / Débito" },
+                    { key:"qr", label:"📱 QR / Transferencia" },
+                    { key:"consumo", label:"👤 Consumo empleado" },
+                  ].map(function(fp) {
+                    return (
+                      <button key={fp.key} onClick={function() { setFormaPago(fp.key); }}
+                        style={{ padding:"11px 14px", borderRadius:12, cursor:"pointer", fontSize:14, textAlign:"left", fontFamily:"Nunito, sans-serif", transition:"all 0.15s",
+                          border: formaPago === fp.key ? "3px solid " + C.violeta : "3px solid " + C.violetaPale,
+                          background: formaPago === fp.key ? C.violetaPale : C.blanco,
+                          color: formaPago === fp.key ? C.violeta : "#555",
+                          fontWeight: formaPago === fp.key ? 800 : 600 }}>
+                        {fp.label}
+                      </button>
+                    );
+                  })}
+                  {formaPago === "efectivo" && (
+                    <div>
+                      <label style={{ fontSize:11, color:C.violetaMed, fontWeight:800, display:"block", marginBottom:6, textTransform:"uppercase" }}>Monto recibido (opcional)</label>
+                      <input type="number" value={recibido} onChange={function(e){setRecibido(e.target.value);}} placeholder="Opcional"
+                        style={{ width:"100%", padding:"12px", borderRadius:12, border:"2px solid " + C.violetaLight, fontSize:18, fontWeight:900, color:C.violeta, boxSizing:"border-box", fontFamily:"Nunito, sans-serif", outline:"none" }} />
+                      {recibido && Number(recibido) >= total && (
+                        <div style={{ marginTop:8, padding:"10px 14px", background:C.mentaPale, borderRadius:10, color:"#2a7a5e", fontWeight:800, fontSize:15, display:"flex", justifyContent:"space-between" }}>
+                          <span>Vuelto:</span><span>{fmt(vuelto)}</span>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {recibido && Number(recibido) < total && (
-                    <div style={{ marginTop: 8, padding: "8px 12px", background: "#fff3cd", borderRadius: 10, color: "#856404", fontWeight: 700, fontSize: 12 }}>
-                      ⚠️ El monto ingresado es menor al total
+                  {formaPago === "consumo" && (
+                    <div style={{ background:"#e8f0fe", borderRadius:10, padding:"12px 14px" }}>
+                      <div style={{ fontWeight:800, color:"#2d5fa8", fontSize:13 }}>Consumo de {sesion.usuario.nombre}</div>
+                      <div style={{ fontSize:12, color:"#555", marginTop:4 }}>Se registra en tu cuenta corriente.</div>
                     </div>
                   )}
                 </div>
               )}
-              {formaPago === "consumo" && (
-                <div style={{ background: "#e8f0fe", borderRadius: 10, padding: "12px 14px", marginTop: 8 }}>
-                  <div style={{ fontWeight: 800, color: "#2d5fa8", fontSize: 13 }}>Consumo de {sesion.usuario.nombre}</div>
-                  <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>Se registra en tu cuenta corriente. No descuenta de caja.</div>
+
+              {/* PAGO MIXTO */}
+              {hayPagos && (
+                <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:8 }}>
+                  {pagos.map(function(pago, idx) {
+                    var saldoEste = total - pagos.reduce(function(s,p,i){ return i < idx ? s + Number(p.monto||0) : s; }, 0);
+                    return (
+                      <div key={idx} style={{ background:C.crema, borderRadius:12, padding:"10px 12px" }}>
+                        <div style={{ display:"flex", gap:6, marginBottom:8, flexWrap:"wrap" }}>
+                          {[
+                            { key:"efectivo", label:"💵 Efectivo" },
+                            { key:"tarjeta", label:"💳 Tarjeta" },
+                            { key:"qr", label:"📱 QR" },
+                          ].map(function(m) {
+                            return (
+                              <button key={m.key}
+                                onClick={function() { setPagos(pagos.map(function(p,i){ return i===idx ? {...p, medio:m.key} : p; })); }}
+                                style={{ padding:"5px 10px", borderRadius:8, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif",
+                                  border: pago.medio===m.key ? "2px solid " + C.violeta : "2px solid " + C.violetaLight,
+                                  background: pago.medio===m.key ? C.violetaPale : C.blanco,
+                                  color: pago.medio===m.key ? C.violeta : "#555", fontWeight: pago.medio===m.key ? 800 : 600 }}>
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                          {pagos.length > 2 && (
+                            <button onClick={function() { setPagos(pagos.filter(function(_,i){ return i!==idx; })); }}
+                              style={{ padding:"5px 8px", borderRadius:8, border:"none", background:"#ffe8e8", color:"#e74c3c", cursor:"pointer", fontSize:12, fontWeight:800 }}>✕</button>
+                          )}
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <input type="number"
+                            value={pago.monto}
+                            onChange={function(e) { setPagos(pagos.map(function(p,i){ return i===idx ? {...p, monto:e.target.value} : p; })); }}
+                            placeholder={idx === pagos.length-1 && saldoEste > 0 ? "Saldo: " + fmt(saldoEste) : "Monto"}
+                            style={{ flex:1, padding:"10px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:16, fontWeight:900, color:C.violeta, fontFamily:"Nunito, sans-serif", outline:"none" }} />
+                          {idx === pagos.length-1 && saldoEste > 0 && !pago.monto && (
+                            <button onClick={function() { setPagos(pagos.map(function(p,i){ return i===idx ? {...p, monto:String(saldoEste)} : p; })); }}
+                              style={{ padding:"10px 12px", borderRadius:10, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif", whiteSpace:"nowrap" }}>
+                              Saldo {fmt(saldoEste)}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button onClick={function() { setPagos([...pagos, {medio:"qr", monto:""}]); }}
+                    style={{ padding:"8px", borderRadius:10, border:"2px dashed " + C.violetaLight, background:C.blanco, color:C.violetaMed, cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
+                    + Agregar otro medio
+                  </button>
+                  {saldoPendiente > 0 && (
+                    <div style={{ background:"#fff3cd", borderRadius:10, padding:"8px 12px", fontWeight:800, color:"#856404", fontSize:13, display:"flex", justifyContent:"space-between" }}>
+                      <span>⚠️ Saldo pendiente</span><span>{fmt(saldoPendiente)}</span>
+                    </div>
+                  )}
+                  {saldoPendiente <= 0 && totalPagado > 0 && (
+                    <div style={{ background:C.mentaPale, borderRadius:10, padding:"8px 12px", fontWeight:800, color:"#2a7a5e", fontSize:13, display:"flex", justifyContent:"space-between" }}>
+                      <span>✅ Pago completo</span>
+                      {totalPagado > total && <span>Vuelto: {fmt(totalPagado - total)}</span>}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
