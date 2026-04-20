@@ -1587,6 +1587,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
 function Admin({ data, setData, onLogout }) {
   const [tab, setTab] = useState("dashboard");
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   const tabs = [
     { key: "dashboard", icon: "📊", label: "Dashboard" },
@@ -1598,62 +1599,129 @@ function Admin({ data, setData, onLogout }) {
     { key: "usuarios", icon: "👥", label: "Usuarios" },
   ];
 
+  var tabActual = tabs.find(function(t) { return t.key === tab; });
+
   return (
-    <div style={{ minHeight: "100vh", background: C.crema, fontFamily: "Nunito, sans-serif", display: "flex" }}>
-      <style>{FONTS}</style>
+    <div style={{ minHeight:"100vh", background:C.crema, fontFamily:"Nunito, sans-serif" }}>
+      <style>{FONTS}
+        {`
+          @media (min-width: 768px) {
+            .admin-layout { display: flex !important; }
+            .admin-sidebar { display: flex !important; }
+            .admin-topbar { display: none !important; }
+            .admin-content { padding: 24px !important; }
+          }
+          @media (max-width: 767px) {
+            .admin-layout { display: block !important; }
+            .admin-sidebar { display: none !important; }
+            .admin-topbar { display: flex !important; }
+            .admin-content { padding: 12px !important; overflow-x: hidden !important; }
+            .overflow-x-auto { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+          }
+          .admin-layout { display: flex; }
+          .admin-sidebar { display: flex; }
+          .admin-topbar { display: none; }
+          .admin-content { padding: 24px; }
+          * { box-sizing: border-box; }
+          table { min-width: 100%; }
+        `}
+      </style>
 
-      {/* Sidebar */}
-      <div style={{ width: 230, background: C.violeta, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
-        <Blob color={C.amarillo} style={{ width: 180, height: 180, top: -60, right: -60, opacity: 0.2 }} />
-        <Blob color={C.rosa} style={{ width: 140, height: 140, bottom: 40, left: -50, opacity: 0.2 }} />
+      {/* TOP BAR MOBILE */}
+      <div className="admin-topbar" style={{ background:C.violeta, padding:"10px 16px", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:50, boxShadow:"0 2px 8px rgba(0,0,0,0.2)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <button onClick={function(){ setMenuAbierto(!menuAbierto); }}
+            style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, padding:"6px 10px", cursor:"pointer", color:"white", fontSize:18 }}>
+            ☰
+          </button>
+          <div style={{ color:"white", fontWeight:900, fontSize:16, fontFamily:"Baloo 2, cursive" }}>
+            {tabActual ? tabActual.icon + " " + tabActual.label : "Venecia"}
+          </div>
+        </div>
+        <Logo size={32} dark />
+      </div>
 
-        <div style={{ padding: "28px 20px 20px", borderBottom: `1px solid rgba(255,255,255,0.12)`, position: "relative" }}>
-          <Logo size={44} dark />
-          <div style={{ marginTop: 10, background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 12px" }}>
-            <div style={{ color: C.amarillo, fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>PANEL ADMIN</div>
+      {/* MENU MOBILE DESPLEGABLE */}
+      {menuAbierto && (
+        <div style={{ position:"fixed", inset:0, zIndex:100 }}>
+          <div onClick={function(){ setMenuAbierto(false); }}
+            style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.5)" }} />
+          <div style={{ position:"absolute", left:0, top:0, bottom:0, width:240, background:C.violeta, display:"flex", flexDirection:"column", boxShadow:"4px 0 20px rgba(0,0,0,0.3)" }}>
+            <div style={{ padding:"20px 16px 12px", borderBottom:"1px solid rgba(255,255,255,0.1)" }}>
+              <Logo size={40} dark />
+              <div style={{ marginTop:8, background:"rgba(255,255,255,0.12)", borderRadius:8, padding:"4px 10px", display:"inline-block" }}>
+                <div style={{ color:C.amarillo, fontSize:10, fontWeight:800, letterSpacing:1 }}>PANEL ADMIN</div>
+              </div>
+            </div>
+            <nav style={{ flex:1, padding:"8px 0", overflowY:"auto" }}>
+              {tabs.map(function(t) {
+                return (
+                  <button key={t.key} onClick={function(){ setTab(t.key); setMenuAbierto(false); }}
+                    style={{ width:"100%", padding:"13px 16px", background: tab===t.key ? "rgba(255,255,255,0.15)" : "transparent",
+                      border:"none", borderLeft: tab===t.key ? "4px solid " + C.amarillo : "4px solid transparent",
+                      color: tab===t.key ? "white" : "rgba(255,255,255,0.7)",
+                      textAlign:"left", cursor:"pointer", fontSize:15, fontWeight: tab===t.key ? 800 : 600,
+                      fontFamily:"Nunito, sans-serif", display:"flex", alignItems:"center", gap:10 }}>
+                    <span>{t.icon}</span> {t.label}
+                  </button>
+                );
+              })}
+            </nav>
+            <div style={{ padding:12, borderTop:"1px solid rgba(255,255,255,0.1)" }}>
+              <button onClick={onLogout} style={{ width:"100%", padding:"10px", borderRadius:10, border:"2px solid rgba(255,255,255,0.3)", background:"transparent", color:"rgba(255,255,255,0.8)", cursor:"pointer", fontFamily:"Nunito, sans-serif", fontWeight:700 }}>
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="admin-layout">
+        {/* SIDEBAR DESKTOP */}
+        <div className="admin-sidebar" style={{ width:230, background:C.violeta, flexDirection:"column", position:"relative", overflow:"hidden", flexShrink:0, minHeight:"100vh" }}>
+          <Blob color={C.amarillo} style={{ width:180, height:180, top:-60, right:-60, opacity:0.2 }} />
+          <Blob color={C.rosa} style={{ width:140, height:140, bottom:40, left:-50, opacity:0.2 }} />
+          <div style={{ padding:"28px 20px 20px", borderBottom:"1px solid rgba(255,255,255,0.12)", position:"relative" }}>
+            <Logo size={44} dark />
+            <div style={{ marginTop:10, background:"rgba(255,255,255,0.12)", borderRadius:10, padding:"6px 12px" }}>
+              <div style={{ color:C.amarillo, fontSize:11, fontWeight:800, letterSpacing:1 }}>PANEL ADMIN</div>
+            </div>
+          </div>
+          <nav style={{ flex:1, padding:"14px 10px", position:"relative" }}>
+            {tabs.map(function(t) {
+              return (
+                <button key={t.key} onClick={function(){ setTab(t.key); }}
+                  style={{ width:"100%", padding:"11px 14px", marginBottom:4,
+                    background: tab===t.key ? "rgba(255,255,255,0.15)" : "transparent",
+                    border:"none", borderRadius:12,
+                    borderLeft: tab===t.key ? "4px solid " + C.amarillo : "4px solid transparent",
+                    color: tab===t.key ? "white" : "rgba(255,255,255,0.6)",
+                    textAlign:"left", cursor:"pointer", fontSize:14,
+                    fontWeight: tab===t.key ? 800 : 600,
+                    fontFamily:"Nunito, sans-serif", transition:"all 0.2s",
+                    display:"flex", alignItems:"center", gap:10 }}>
+                  <span>{t.icon}</span> {t.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div style={{ padding:16, borderTop:"1px solid rgba(255,255,255,0.1)", position:"relative" }}>
+            <button onClick={onLogout} style={{ width:"100%", padding:"10px", borderRadius:12, border:"2px solid rgba(255,255,255,0.25)", background:"transparent", color:"rgba(255,255,255,0.7)", cursor:"pointer", fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:700 }}>
+              Cerrar sesión
+            </button>
           </div>
         </div>
 
-        <nav style={{ flex: 1, padding: "14px 10px", position: "relative" }}>
-          {tabs.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              style={{
-                width: "100%", padding: "11px 14px", marginBottom: 4,
-                background: tab === t.key ? "rgba(255,255,255,0.15)" : "transparent",
-                border: "none", borderRadius: 12,
-                borderLeft: tab === t.key ? `4px solid ${C.amarillo}` : "4px solid transparent",
-                color: tab === t.key ? C.blanco : "rgba(255,255,255,0.6)",
-                textAlign: "left", cursor: "pointer", fontSize: 14,
-                fontWeight: tab === t.key ? 800 : 600,
-                fontFamily: "Nunito, sans-serif",
-                transition: "all 0.2s",
-                display: "flex", alignItems: "center", gap: 10,
-              }}>
-              <span>{t.icon}</span> {t.label}
-            </button>
-          ))}
-        </nav>
-
-        <div style={{ padding: 16, borderTop: `1px solid rgba(255,255,255,0.1)`, position: "relative" }}>
-          <button onClick={onLogout} style={{
-            width: "100%", padding: "10px", borderRadius: 12,
-            border: "2px solid rgba(255,255,255,0.25)", background: "transparent",
-            color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13,
-            fontFamily: "Nunito, sans-serif", fontWeight: 700,
-          }}>
-            Cerrar sesión
-          </button>
+        {/* CONTENIDO */}
+        <div className="admin-content" style={{ flex:1, overflowY:"auto", overflowX:"hidden", maxWidth:"100%" }}>
+          {tab === "dashboard" && <Dashboard data={data} />}
+          {tab === "ventas" && <TabVentas data={data} setData={setData} />}
+          {tab === "resultados" && <TabResultados data={data} />}
+          {tab === "caja" && <TabCaja data={data} />}
+          {tab === "consumos" && <TabConsumos data={data} />}
+          {tab === "productos" && <TabProductos data={data} setData={setData} />}
+          {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
         </div>
-      </div>
-
-      {/* Contenido */}
-      <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-        {tab === "dashboard" && <Dashboard data={data} />}
-        {tab === "ventas" && <TabVentas data={data} />}
-        {tab === "resultados" && <TabResultados data={data} />}
-        {tab === "caja" && <TabCaja data={data} />}
-        {tab === "productos" && <TabProductos data={data} setData={setData} />}
-        {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
       </div>
     </div>
   );
@@ -1786,7 +1854,7 @@ function Dashboard({ data }) {
       </Card>
 
       {/* Tarjetas */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(190px, 1fr))", gap:14, marginBottom:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10, marginBottom:16 }}>
         <StatCard label="Total vendido"   value={fmt(totalPeriodo)}    sub={`${ventasFiltradas.length} transacciones`} color={C.violeta} icon="🍦" />
         <StatCard label="Costo de ventas" value={fmt(costoPeriodo)}    sub="Mercadería vendida"  color="#e74c3c" icon="📦" />
         <StatCard label="Ganancia bruta"  value={fmt(gananciaPeriodo)} sub={`Margen: ${margenPeriodo}%`} color="#27ae60" icon="💰" />
@@ -1859,7 +1927,7 @@ function Dashboard({ data }) {
         )}
       </Card>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:14 }}>
         <Card>
           <h4 style={{ margin:"0 0 14px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>Ventas por sucursal</h4>
           {porSucursal.map((s,i) => (
@@ -2000,7 +2068,8 @@ function TabVentas({ data }) {
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="overflow-x-auto">
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 600 }}>
             <thead>
               <tr style={{ background: C.violetaPale }}>
                 {["#", "Fecha", "Hora", "Sucursal", "Empleada", "Ítems", "Total", "Pago", ""].map((h, i) => (
@@ -2324,7 +2393,8 @@ function TabResultados({ data }) {
           <div style={{ padding: "16px 20px", background: C.violetaPale }}>
             <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Desglose por producto</h4>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="overflow-x-auto">
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
             <thead>
               <tr style={{ background: C.crema }}>
                 {["Producto", "Cant. vendida", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
@@ -2655,7 +2725,8 @@ function TabInsumos({ data, setData }) {
       </div>
 
       <Card style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="overflow-x-auto">
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 400 }}>
           <thead>
             <tr style={{ background: C.violetaPale }}>
               {["Nombre del insumo", "Costo unitario", "Usado en", ""].map((h, i) => (
@@ -2682,6 +2753,7 @@ function TabInsumos({ data, setData }) {
             })}
           </tbody>
         </table>
+        </div>
       </Card>
       <p style={{ fontSize: 12, color: "#aaa", margin: "6px 0 0 4px" }}>💡 Al modificar el costo de un insumo, el costo de todos los productos que lo usan se actualiza automáticamente.</p>
 
@@ -2786,7 +2858,8 @@ function TabConsumos({ data }) {
         </Card>
       ) : (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <div className="overflow-x-auto">
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:550 }}>
             <thead>
               <tr style={{ background:C.violetaPale }}>
                 {["Fecha", "Hora", "Empleada", "Sucursal", "Productos", "Total", ""].map(function(h,i) {
@@ -2828,6 +2901,7 @@ function TabConsumos({ data }) {
               })}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>
@@ -3205,6 +3279,7 @@ function TabUsuarios({ data, setData }) {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {editando && (
