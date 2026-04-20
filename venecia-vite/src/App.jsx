@@ -196,6 +196,10 @@ async function eliminarUsuario(id) {
   await supabase.from('usuarios').delete().eq('id', id)
 }
 
+async function eliminarVenta(id) {
+  await supabase.from('ventas').delete().eq('id', id)
+}
+
 
 // ─── PALETA VENECIA ──────────────────────────────────────────────────────────
 const C = {
@@ -2019,6 +2023,15 @@ function TabVentas({ data }) {
                     <button onClick={function() { setVentaEditando(v); setEditForm({ formaPago: v.formaPago, items: v.items.map(function(it){ return {...it}; }) }); }}
                       style={{ padding:"4px 10px", borderRadius:8, border:"2px solid " + C.violeta, background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:C.violeta, fontFamily:"Nunito, sans-serif", marginRight:4 }}>
                       Editar
+                    </button>
+                    <button onClick={function() {
+                        if (window.confirm("¿Eliminar esta venta? Esta acción no se puede deshacer.")) {
+                          eliminarVenta(v.id);
+                          setData(function(prev) { return { ...prev, ventas: prev.ventas.filter(function(x){ return x.id !== v.id; }) }; });
+                        }
+                      }}
+                      style={{ padding:"4px 10px", borderRadius:8, border:"2px solid #ffb3b3", background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:"#e74c3c", fontFamily:"Nunito, sans-serif", marginRight:4 }}>
+                      Eliminar
                     </button>
                     <button onClick={() => setVentaDetalle(v)}
                       style={{ padding: "4px 10px", borderRadius: 8, border: `2px solid ${C.violetaLight}`, background: C.blanco, cursor: "pointer", fontSize: 11, fontWeight: 700, color: C.violeta, fontFamily: "Nunito, sans-serif" }}>
