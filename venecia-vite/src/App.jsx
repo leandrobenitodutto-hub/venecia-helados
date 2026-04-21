@@ -380,8 +380,11 @@ const INITIAL_DATA = {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmt = (n) => `$${Number(n).toLocaleString("es-AR")}`;
-const hoy = () => new Date().toISOString().slice(0, 10);
-const ahora = () => new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+const hoy = () => {
+  var d = new Date();
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+};
+const ahora = () => new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
 const fechaLegible = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 // Filtra ventas por rango de hora "HH:MM"
