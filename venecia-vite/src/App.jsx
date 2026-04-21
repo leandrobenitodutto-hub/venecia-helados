@@ -880,6 +880,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [paso, setPaso] = useState("productos");
   const [pagos, setPagos] = useState([]); // [{medio, monto}]
+  const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null); // quien consume
+  const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [catActiva, setCatActiva] = useState("productos");
   const [mostrarCierre, setMostrarCierre] = useState(false);
   const [ticketCierre, setTicketCierre] = useState(null);
@@ -929,9 +931,17 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       recibido: recibido ? Number(recibido) : 0,
       vuelto: recibido && Number(recibido) > total ? Number(recibido) - total : 0,
     };
+    var nombreConsumo = String(empleadaConsumoId) === "otro"
+      ? (empleadaConsumoNombre || "Sin nombre")
+      : empleadaConsumoId
+        ? (data.usuarios.find(function(u) { return u.id === Number(empleadaConsumoId); }) || sesion.usuario).nombre
+        : sesion.usuario.nombre;
+    var idConsumo = String(empleadaConsumoId) === "otro" ? null : (empleadaConsumoId ? Number(empleadaConsumoId) : sesion.usuario.id);
     var consumoObj = formaPago === "consumo" ? {
       id: nuevaVenta.id, fecha: nuevaVenta.fecha, hora: nuevaVenta.hora,
-      usuarioId: sesion.usuario.id, usuarioNombre: sesion.usuario.nombre,
+      usuarioId: idConsumo,
+      usuarioNombre: nombreConsumo,
+      registradoPor: sesion.usuario.nombre,
       sucursalNombre: sesion.sucursal.nombre,
       items: nuevaVenta.items, total: nuevaVenta.total, cajaId: caja.id,
     } : null;
@@ -943,7 +953,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       return next;
     });
     setTicketVenta(nuevaVenta);
-    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]);
+    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre("");
   };
 
   // Calcular totales de pagos mixtos
@@ -1260,8 +1270,36 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                   )}
                   {formaPago === "consumo" && (
                     <div style={{ background:"#e8f0fe", borderRadius:10, padding:"12px 14px" }}>
-                      <div style={{ fontWeight:800, color:"#2d5fa8", fontSize:13 }}>Consumo de {sesion.usuario.nombre}</div>
-                      <div style={{ fontSize:12, color:"#555", marginTop:4 }}>Se registra en tu cuenta corriente.</div>
+                      <div style={{ fontWeight:800, color:"#2d5fa8", fontSize:13, marginBottom:8 }}>
+                        Quien consume:
+                      </div>
+                      <select
+                        value={empleadaConsumoId || sesion.usuario.id}
+                        onChange={function(e) { setEmpleadaConsumoId(e.target.value); }}
+                        style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid #b3c8f0",
+                          fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:700, color:"#2d5fa8",
+                          background:"white", outline:"none", marginBottom:8 }}>
+                        {data.usuarios.filter(function(u) { return u.rol !== "admin"; }).map(function(u) {
+                          return (
+                            <option key={u.id} value={u.id}>{u.nombre}</option>
+                          );
+                        })}
+                        <option value="otro">Otro (escribir nombre)...</option>
+                      </select>
+                      {String(empleadaConsumoId) === "otro" && (
+                        <input
+                          type="text"
+                          placeholder="Nombre de quien consume"
+                          value={empleadaConsumoNombre || ""}
+                          onChange={function(e) { setEmpleadaConsumoNombre(e.target.value); }}
+                          style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid #b3c8f0",
+                            fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:700, color:"#2d5fa8",
+                            outline:"none", marginBottom:8, boxSizing:"border-box" }}
+                        />
+                      )}
+                      <div style={{ fontSize:11, color:"#888" }}>
+                        Registrado por: {sesion.usuario.nombre}. No descuenta de caja.
+                      </div>
                     </div>
                   )}
                 </div>
