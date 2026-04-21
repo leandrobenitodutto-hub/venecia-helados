@@ -880,6 +880,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [paso, setPaso] = useState("productos");
   const [pagos, setPagos] = useState([]); // [{medio, monto}]
+  const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null);
+  const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null); // quien consume
   const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [catActiva, setCatActiva] = useState("productos");
