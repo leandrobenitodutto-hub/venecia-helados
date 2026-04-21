@@ -880,8 +880,6 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [paso, setPaso] = useState("productos");
   const [pagos, setPagos] = useState([]); // [{medio, monto}]
-  const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null);
-  const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null); // quien consume
   const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [catActiva, setCatActiva] = useState("productos");
@@ -2029,6 +2027,7 @@ function TabVentas({ data }) {
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [ventaEditando, setVentaEditando] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [editCat, setEditCat] = useState("productos");
 
   const setAtajo = (tipo) => {
     const hoyStr = hoy();
@@ -2208,8 +2207,57 @@ function TabVentas({ data }) {
             {fechaLegible(ventaEditando.fecha)} {ventaEditando.hora} · {ventaEditando.usuario_nombre}
           </div>
 
+          {/* Selector de productos - igual al POS */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Agregar producto</div>
+            <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+              {["productos","promos","pedidoya"].map(function(cat) {
+                var labels = {productos:"Productos", promos:"Promos", pedidoya:"Pedido Ya"};
+                return (
+                  <button key={cat} onClick={function(){setEditCat(cat);}}
+                    style={{ flex:1, padding:"6px 4px", borderRadius:8, border:"none", cursor:"pointer", fontSize:11, fontWeight:800, fontFamily:"Nunito, sans-serif",
+                      background: editCat===cat ? C.violeta : C.violetaPale,
+                      color: editCat===cat ? C.blanco : C.violetaMed }}>
+                    {labels[cat]}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:6, maxHeight:180, overflowY:"auto" }}>
+              {data.productos.filter(function(p){ return p.categoria===editCat && p.activo; }).map(function(p) {
+                return (
+                  <button key={p.id}
+                    onClick={function() {
+                      var existe = editForm.items.find(function(it){ return it.id===p.id; });
+                      if (existe) {
+                        setEditForm({...editForm, items: editForm.items.map(function(it) {
+                          if (it.id !== p.id) return it;
+                          var nc = it.cantidad + 1;
+                          return {...it, cantidad:nc, subtotal:nc*it.precio, costo_total:nc*(it.costo||0)};
+                        })});
+                      } else {
+                        var costo = p.costo || 0;
+                        setEditForm({...editForm, items: [...editForm.items, {
+                          id: p.id, nombre: p.nombre, emoji: p.emoji,
+                          cantidad: 1, precio: p.precio, costo: costo,
+                          subtotal: p.precio, costo_total: costo
+                        }]});
+                      }
+                    }}
+                    style={{ padding:"8px 4px", borderRadius:10, border:"2px solid " + C.violetaPale,
+                      background:C.blanco, cursor:"pointer", textAlign:"center",
+                      fontFamily:"Nunito, sans-serif" }}>
+                    <div style={{ fontSize:18 }}>{p.emoji}</div>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.dark, marginTop:2 }}>{p.nombre}</div>
+                    <div style={{ fontSize:10, color:C.violeta, fontWeight:800 }}>{fmt(p.precio)}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Productos</div>
+            <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Productos en la venta</div>
             {editForm.items.map(function(item, idx) {
               return (
                 <div key={idx} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid " + C.violetaPale }}>
@@ -3432,4 +3480,4 @@ export default function App() {
   if (sesion.usuario.rol === "admin") return <Admin data={data} setData={setData} onLogout={handleLogout} />;
   if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
- }
+}
