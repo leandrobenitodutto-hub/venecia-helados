@@ -2111,6 +2111,7 @@ function TabVentas({ data }) {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 
