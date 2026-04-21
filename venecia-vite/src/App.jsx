@@ -219,6 +219,12 @@ const C = {
   blanco: "#FFFFFF",
 };
 
+const MOBILE_TABLE_CSS = `
+  @media (max-width: 767px) {
+    table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+`;
+
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@700;800&display=swap');`;
 
 const PRINT_STYLES = `
@@ -1603,7 +1609,7 @@ function Admin({ data, setData, onLogout }) {
 
   return (
     <div style={{ minHeight:"100vh", background:C.crema, fontFamily:"Nunito, sans-serif" }}>
-      <style>{FONTS}
+      <style>{FONTS}{MOBILE_TABLE_CSS}
         {`
           @media (min-width: 768px) {
             .admin-layout { display: flex !important; }
@@ -2068,8 +2074,7 @@ function TabVentas({ data }) {
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div className="overflow-x-auto">
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 600 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: C.violetaPale }}>
                 {["#", "Fecha", "Hora", "Sucursal", "Empleada", "Ítems", "Total", "Pago", ""].map((h, i) => (
@@ -2111,7 +2116,6 @@ function TabVentas({ data }) {
               ))}
             </tbody>
           </table>
-          </div>
         </Card>
       )}
 
@@ -2394,7 +2398,6 @@ function TabResultados({ data }) {
           <div style={{ padding: "16px 20px", background: C.violetaPale }}>
             <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Desglose por producto</h4>
           </div>
-          <div className="overflow-x-auto">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
             <thead>
               <tr style={{ background: C.crema }}>
@@ -2426,7 +2429,6 @@ function TabResultados({ data }) {
               })}
             </tbody>
           </table>
-          </div>
         </Card>
       )}
     </div>
@@ -2727,7 +2729,6 @@ function TabInsumos({ data, setData }) {
       </div>
 
       <Card style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
-        <div className="overflow-x-auto">
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 400 }}>
           <thead>
             <tr style={{ background: C.violetaPale }}>
@@ -2755,7 +2756,6 @@ function TabInsumos({ data, setData }) {
             })}
           </tbody>
         </table>
-        </div>
       </Card>
       <p style={{ fontSize: 12, color: "#aaa", margin: "6px 0 0 4px" }}>💡 Al modificar el costo de un insumo, el costo de todos los productos que lo usan se actualiza automáticamente.</p>
 
@@ -2860,8 +2860,7 @@ function TabConsumos({ data }) {
         </Card>
       ) : (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <div className="overflow-x-auto">
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:550 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead>
               <tr style={{ background:C.violetaPale }}>
                 {["Fecha", "Hora", "Empleada", "Sucursal", "Productos", "Total", ""].map(function(h,i) {
@@ -2903,7 +2902,6 @@ function TabConsumos({ data }) {
               })}
             </tbody>
           </table>
-          </div>
         </Card>
       )}
     </div>
@@ -3281,7 +3279,6 @@ function TabUsuarios({ data, setData }) {
             ))}
           </tbody>
         </table>
-        </div>
       </Card>
 
       {editando && (
