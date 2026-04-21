@@ -2426,6 +2426,7 @@ function TabResultados({ data }) {
               })}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>
