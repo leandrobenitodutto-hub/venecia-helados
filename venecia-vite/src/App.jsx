@@ -3430,4 +3430,4 @@ export default function App() {
   if (sesion.usuario.rol === "admin") return <Admin data={data} setData={setData} onLogout={handleLogout} />;
   if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
-}
+ }
