@@ -682,12 +682,36 @@ function TicketCierre({ caja, sucursal, onClose }) {
 }
 
 // ─── APERTURA DE CAJA ─────────────────────────────────────────────────────────
-function AperturaCaja({ sesion, onAbrir }) {
+function AperturaCaja({ sesion, onAbrir, data }) {
   const [monto, setMonto] = useState("");
 
-  const abrir = () => {
+  // Verificar si hay otra caja abierta en esta sucursal (de otro usuario)
+  var cajaOtraPersona = data.cajas.find(function(c) {
+    return !c.cerrada && c.sucursal_id === sesion.sucursal.id && c.usuario_id !== sesion.usuario.id;
+  });
+
+  const abrir = function() {
     onAbrir(Number(monto) || 0);
   };
+
+  if (cajaOtraPersona) {
+    return (
+      <div style={{ minHeight:"100vh", background:C.violeta, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"Nunito, sans-serif" }}>
+        <style>{FONTS}</style>
+        <div style={{ background:C.blanco, borderRadius:24, padding:"40px 32px", maxWidth:380, width:"100%", textAlign:"center", boxShadow:"0 24px 60px rgba(0,0,0,0.3)" }}>
+          <div style={{ fontSize:60, marginBottom:16 }}>🔒</div>
+          <h2 style={{ color:C.violeta, fontFamily:"Baloo 2, cursive", margin:"0 0 12px" }}>Caja ocupada</h2>
+          <p style={{ color:"#666", fontSize:14, lineHeight:1.6, marginBottom:20 }}>
+            <strong>{cajaOtraPersona.usuario_nombre}</strong> ya tiene una caja abierta en <strong>{sesion.sucursal.nombre}</strong>.
+            No se puede abrir otra caja hasta que la cierre.
+          </p>
+          <div style={{ background:C.violetaPale, borderRadius:12, padding:"12px 16px", fontSize:13, color:C.violeta, fontWeight:700 }}>
+            Abierta desde las {cajaOtraPersona.hora_apertura}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight:"100vh", background:C.violeta, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"Nunito, sans-serif", position:"relative", overflow:"hidden" }}>
@@ -3438,7 +3462,26 @@ export default function App() {
 
   const handleLogin = function(s) {
     setSesion(s);
-    setCajaActiva(null);
+    // Buscar si hay caja abierta para este usuario en esta sucursal
+    var cajaExistente = data.cajas.find(function(c) {
+      return !c.cerrada && c.usuario_id === s.usuario.id && c.sucursal_id === s.sucursal.id;
+    });
+    if (cajaExistente) {
+      // Restaurar la caja activa directamente
+      setCajaActiva({
+        id: cajaExistente.id,
+        usuarioId: cajaExistente.usuario_id,
+        usuarioNombre: cajaExistente.usuario_nombre,
+        sucursalId: cajaExistente.sucursal_id,
+        sucursalNombre: cajaExistente.sucursal_nombre,
+        fecha: cajaExistente.fecha,
+        horaApertura: cajaExistente.hora_apertura,
+        montoInicial: cajaExistente.monto_inicial || 0,
+        cerrada: false,
+      });
+    } else {
+      setCajaActiva(null);
+    }
   };
 
   const handleAbrirCaja = async function(montoInicial) {
@@ -3478,6 +3521,6 @@ export default function App() {
 
   if (!sesion) return <Login data={data} onLogin={handleLogin} />;
   if (sesion.usuario.rol === "admin") return <Admin data={data} setData={setData} onLogout={handleLogout} />;
-  if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} />;
+  if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} data={data} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
 }
