@@ -1014,12 +1014,16 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     setMostrarRetiro(false);
   }
 
-  const handleCerrarCaja = () => {
+  const handleCerrarCaja = async function() {
     const horaCierre = ahora();
     const cajaCerrada = { ...caja, horaCierre, cerrada: true, ventas: ventasCaja };
-    cerrarCaja(caja.id, horaCierre);
+    try {
+      await cerrarCaja(caja.id, horaCierre);
+    } catch(e) {
+      console.error("Error cerrando caja:", e);
+    }
     setData(function(prev) {
-      return { ...prev, cajas: prev.cajas.map(function(c) { return c.id === caja.id ? { ...c, horaCierre, cerrada: true } : c; }) };
+      return { ...prev, cajas: prev.cajas.map(function(c) { return c.id === caja.id ? { ...c, hora_cierre: horaCierre, cerrada: true } : c; }) };
     });
     setTicketCierre(cajaCerrada);
     setMostrarCierre(false);
