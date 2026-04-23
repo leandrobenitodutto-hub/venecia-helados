@@ -783,6 +783,7 @@ function Login({ data, onLogin }) {
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
   const [adminMode, setAdminMode] = useState(false);
+  const [recordar, setRecordar] = useState(false);
 
   const empleadosFiltrados = data.usuarios.filter(
     (u) => u.rol === "empleada" && (sucId === "" || u.sucursal_id === Number(sucId))
@@ -795,6 +796,11 @@ function Login({ data, onLogin }) {
     if (usuario.rol === "empleada" && !sucId) { setError("Elegí la sucursal."); return; }
     if (usuario.clave !== clave) { setError("Clave incorrecta ❌"); return; }
     const suc = usuario.rol === "admin" ? null : data.sucursales.find((s) => s.id === Number(sucId));
+    if (usuario.rol === "admin" && recordar) {
+      try { localStorage.setItem("venecia_admin_id", String(usuario.id)); } catch(e) {}
+    } else {
+      try { localStorage.removeItem("venecia_admin_id"); } catch(e) {}
+    }
     onLogin({ usuario, sucursal: suc });
   };
 
@@ -890,6 +896,19 @@ function Login({ data, onLogin }) {
             </div>
           )}
 
+          {adminMode && (
+            <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
+              <input
+                type="checkbox"
+                checked={recordar}
+                onChange={function(e) { setRecordar(e.target.checked); }}
+                style={{ width:18, height:18, cursor:"pointer", accentColor:C.amarillo }}
+              />
+              <span style={{ fontSize:13, color:"rgba(255,255,255,0.8)", fontWeight:600 }}>
+                Recordar sesión en este dispositivo
+              </span>
+            </label>
+          )}
           <button onClick={handleLogin} style={{
             padding: "14px", borderRadius: 14, border: "none",
             background: `linear-gradient(135deg, ${C.violeta}, ${C.violetaMed})`,
@@ -3471,6 +3490,16 @@ export default function App() {
     cargarDatos().then(function(datos) {
       setData(datos);
       setCargando(false);
+      // Verificar si hay sesión admin guardada
+      try {
+        var adminId = localStorage.getItem("venecia_admin_id");
+        if (adminId) {
+          var adminUser = datos.usuarios.find(function(u) { return u.id === Number(adminId) && u.rol === "admin"; });
+          if (adminUser) {
+            setSesion({ usuario: adminUser, sucursal: null });
+          }
+        }
+      } catch(e) {}
     }).catch(function() {
       setCargando(false);
     });
@@ -3537,6 +3566,7 @@ export default function App() {
   };
 
   const handleLogout = function() {
+    try { localStorage.removeItem("venecia_admin_id"); } catch(e) {}
     setSesion(null);
     setCajaActiva(null);
   };
