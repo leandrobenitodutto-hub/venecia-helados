@@ -687,7 +687,9 @@ function AperturaCaja({ sesion, onAbrir, data }) {
 
   // Verificar si hay otra caja abierta en esta sucursal (de otro usuario)
   var cajaOtraPersona = data.cajas.find(function(c) {
-    return !c.cerrada && c.sucursal_id === sesion.sucursal.id && c.usuario_id !== sesion.usuario.id;
+    return (c.cerrada === false || c.cerrada === null || c.cerrada === 0) 
+      && c.sucursal_id === sesion.sucursal.id 
+      && c.usuario_id !== sesion.usuario.id;
   });
 
   const abrir = function() {
@@ -3467,7 +3469,9 @@ export default function App() {
     setData(datosActuales);
     // Buscar si hay caja abierta para este usuario en esta sucursal
     var cajaExistente = datosActuales.cajas.find(function(c) {
-      return !c.cerrada && c.usuario_id === s.usuario.id && c.sucursal_id === s.sucursal.id;
+      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
+        && c.usuario_id === s.usuario.id 
+        && c.sucursal_id === s.sucursal.id;
     });
     if (cajaExistente) {
       setCajaActiva({
