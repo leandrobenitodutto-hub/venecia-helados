@@ -38,7 +38,14 @@ async function cargarDatos() {
       tipoCosto: p.tipo_costo,
     })),
     insumos: insumos || [],
-    cajas: cajas || [],
+    cajas: (cajas || []).map(function(c) { return {
+      ...c,
+      usuarioNombre: c.usuario_nombre,
+      sucursalNombre: c.sucursal_nombre,
+      horaApertura: c.hora_apertura,
+      horaCierre: c.hora_cierre,
+      montoInicial: c.monto_inicial || 0,
+    }; }),
     ventas: (ventas || []).map(v => ({
       ...v,
       sucursal_id: v.sucursal_id,
@@ -2769,7 +2776,12 @@ function TabCaja({ data }) {
                       </span>
                     </div>
                     <div style={{ fontSize:12, color:"#888" }}>
-                      {caja.sucursalNombre} · {caja.horaApertura}{caja.horaCierre ? ` → ${caja.horaCierre}` : " → en curso"} · {ventasCaja.length} ventas
+                      {caja.sucursalNombre} · {fechaLegible(caja.fecha)}
+                    </div>
+                    <div style={{ fontSize:12, color:"#888", marginTop:2 }}>
+                      Apertura: {caja.horaApertura}
+                      {caja.horaCierre ? " · Cierre: " + caja.horaCierre : " · En curso"}
+                      {" · "}{ventasCaja.length} ventas
                     </div>
                   </div>
                   <div style={{ display:"flex", gap:16, alignItems:"center" }}>
