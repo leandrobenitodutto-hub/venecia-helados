@@ -3524,4 +3524,4 @@ export default function App() {
   if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} data={data} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
 }
-// update
+// update2
