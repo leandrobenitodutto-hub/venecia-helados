@@ -3460,14 +3460,16 @@ export default function App() {
     return function() { clearInterval(interval); };
   }, []);
 
-  const handleLogin = function(s) {
+  const handleLogin = async function(s) {
     setSesion(s);
+    // Recargar datos frescos de Supabase para tener el estado real de cajas
+    var datosActuales = await cargarDatos();
+    setData(datosActuales);
     // Buscar si hay caja abierta para este usuario en esta sucursal
-    var cajaExistente = data.cajas.find(function(c) {
+    var cajaExistente = datosActuales.cajas.find(function(c) {
       return !c.cerrada && c.usuario_id === s.usuario.id && c.sucursal_id === s.sucursal.id;
     });
     if (cajaExistente) {
-      // Restaurar la caja activa directamente
       setCajaActiva({
         id: cajaExistente.id,
         usuarioId: cajaExistente.usuario_id,
@@ -3524,4 +3526,3 @@ export default function App() {
   if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} data={data} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
 }
-// update2
