@@ -3509,6 +3509,7 @@ export default function App() {
       montoInicial,
       cerrada: false,
     };
+    console.log('Abriendo caja con id:', nuevaCaja.id);
     await guardarCaja(nuevaCaja);
     setData(function(prev) { return { ...prev, cajas: [...prev.cajas, { ...nuevaCaja, sucursal_id: nuevaCaja.sucursalId, hora_apertura: nuevaCaja.horaApertura }] }; });
     setCajaActiva(nuevaCaja);
