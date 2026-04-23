@@ -110,10 +110,12 @@ async function guardarCaja(caja) {
 }
 
 async function cerrarCaja(id, horaCierre) {
-  await supabase.from('cajas').update({
+  var result = await supabase.from('cajas').update({
     hora_cierre: horaCierre,
     cerrada: true,
-  }).eq('id', id)
+  }).eq('id', Number(id));
+  console.log('cerrarCaja result:', result, 'id:', id);
+  return result;
 }
 
 async function guardarRetiro(retiro) {
