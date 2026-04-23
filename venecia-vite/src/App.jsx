@@ -2192,7 +2192,7 @@ function TabVentas({ data }) {
                   <td style={{ padding: "10px 14px", fontWeight: 700 }}>{v.usuario_nombre}</td>
                   <td style={{ padding: "10px 14px", color: "#888" }}>{v.items.length}</td>
                   <td style={{ padding: "10px 14px", fontWeight: 900, color: "#27ae60" }}>{fmt(v.total)}</td>
-                  <td style={{ padding: "10px 14px" }}>{v.formaPago === "efectivo" ? "💵" : v.formaPago === "tarjeta" ? "💳" : "📱"}</td>
+                  <td style={{ padding: "10px 14px" }}>{v.formaPago === "efectivo" ? "💵" : v.formaPago === "tarjeta" ? "💳" : v.formaPago === "consumo" ? "👤" : v.formaPago === "mixto" ? "🔀" : "📱"}</td>
                   <td style={{ padding: "10px 14px" }}>
                     <button onClick={function() { setVentaEditando(v); setEditForm({ formaPago: v.formaPago, items: v.items.map(function(it){ return {...it}; }) }); }}
                       style={{ padding:"4px 10px", borderRadius:8, border:"2px solid " + C.violeta, background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:C.violeta, fontFamily:"Nunito, sans-serif", marginRight:4 }}>
@@ -2526,6 +2526,8 @@ function TabResultados({ data }) {
             { key: "efectivo", label: "💵 Efectivo", color: "#27ae60" },
             { key: "tarjeta", label: "💳 Tarjeta / Débito", color: "#2980b9" },
             { key: "qr", label: "📱 QR / Transferencia", color: C.violeta },
+            { key: "consumo", label: "👤 Consumo empleado", color: "#7d3c98" },
+            { key: "mixto", label: "🔀 Pago mixto", color: "#e67e22" },
           ].map((fp) => {
             const total2 = porPago[fp.key] || 0;
             const pct = ingresos > 0 ? (total2 / ingresos) * 100 : 0;
@@ -2716,7 +2718,7 @@ function TabCaja({ data }) {
                       <tr key={i} style={{ borderTop:`1px solid ${C.violetaPale}` }}>
                         <td style={{ padding:"6px 10px", color:"#888" }}>{v.hora}</td>
                         <td style={{ padding:"6px 10px" }}>{v.items.map(it=>it.nombre).join(", ").slice(0,30)}{v.items.map(it=>it.nombre).join(", ").length > 30 ? "…" : ""}</td>
-                        <td style={{ padding:"6px 10px" }}>{v.formaPago === "efectivo" ? "💵" : v.formaPago === "tarjeta" ? "💳" : "📱"}</td>
+                        <td style={{ padding:"6px 10px" }}>{v.formaPago === "efectivo" ? "💵" : v.formaPago === "tarjeta" ? "💳" : v.formaPago === "consumo" ? "👤" : v.formaPago === "mixto" ? "🔀" : "📱"}</td>
                         <td style={{ padding:"6px 10px", textAlign:"right", fontWeight:800, color:"#27ae60" }}>{fmt(v.total)}</td>
                       </tr>
                     ))}
