@@ -2456,6 +2456,10 @@ function TabResultados({ data }) {
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={filtroStyle} />
             <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Hasta</span>
             <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={filtroStyle} />
+            <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Hora desde</span>
+            <input type="time" value={horaDesde} onChange={(e) => setHoraDesde(e.target.value)} style={filtroStyle} />
+            <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Hora hasta</span>
+            <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} style={filtroStyle} />
           </div>
           <select value={sucFiltro} onChange={(e) => setSucFiltro(e.target.value)} style={filtroStyle}>
             <option value="">Ambas sucursales</option>
