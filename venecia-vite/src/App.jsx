@@ -253,9 +253,15 @@ const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght
 
 const PRINT_STYLES = `
 @media print {
-  /* Ocultar TODO menos el ticket */
-  body > * { display: none !important; }
-  #ticket-print { display: block !important; }
+  /* Ocultar todo excepto el ticket */
+  body * { visibility: hidden !important; }
+  #ticket-print, #ticket-print * { visibility: visible !important; }
+  #ticket-print {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 76mm !important;
+  }
 
   @page {
     width: 80mm;
@@ -666,7 +672,7 @@ function TicketCierre({ caja, sucursal, onClose }) {
       </div>
 
       {/* Versión impresión térmica */}
-      <div id="ticket-print" style={{ display:"none" }}>
+      <div id="ticket-print-hidden" style={{ display:"none" }}>
         <div className="ticket-title">VENECIA</div>
         <div className="ticket-subtitle">Helados Artesanales</div>
         <div className="ticket-subtitle">{sucursal}</div>
@@ -1551,7 +1557,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
             </div>
 
             {/* Versión impresión térmica corte parcial */}
-            <div id="ticket-print" style={{ display:"none" }}>
+            <div id="ticket-print-hidden" style={{ display:"none" }}>
               <div className="ticket-title">VENECIA</div>
               <div className="ticket-subtitle">Helados Artesanales</div>
               <div className="ticket-subtitle">{sesion.sucursal.nombre}</div>
