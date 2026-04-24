@@ -479,6 +479,26 @@ function imprimirTicket() {
   window.print();
 }
 
+function imprimirHTML(html) {
+  var iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  var doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  iframe.contentWindow.focus();
+  setTimeout(function() {
+    iframe.contentWindow.print();
+    setTimeout(function() { document.body.removeChild(iframe); }, 1000);
+  }, 500);
+}
+
 // ─── TICKET CLIENTE (comanda) ─────────────────────────────────────────────────
 function TicketModal({ venta, sucursal, usuario, onClose }) {
   if (!venta) return null;
@@ -1029,8 +1049,44 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     });
     setTicketVenta(nuevaVenta);
     setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre("");
-    // Imprimir automáticamente
-    setTimeout(function() { window.print(); }, 300);
+    // Imprimir automáticamente via iframe
+    setTimeout(function() {
+      if (nuevaVenta) {
+        var fp = nuevaVenta.formaPago === "efectivo" ? "Efectivo" : nuevaVenta.formaPago === "tarjeta" ? "Tarjeta/Debito" : nuevaVenta.formaPago === "qr" ? "QR/Transferencia" : nuevaVenta.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
+        var items = nuevaVenta.items.map(function(it) {
+          return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">' + '$' + Number(it.subtotal).toLocaleString('es-AR') + '</td></tr>';
+        }).join('');
+        var pagosMixtos = nuevaVenta.pagosMixtos ? nuevaVenta.pagosMixtos.map(function(p) {
+          var lb = {efectivo:'Efectivo', tarjeta:'Tarjeta', qr:'QR'};
+          return '<tr><td>' + (lb[p.medio]||p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR') + '</td></tr>';
+        }).join('') : '';
+        var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+          'body{font-family:Courier New,monospace;font-size:11px;width:76mm;margin:0;padding:2mm;}' +
+          'h2{text-align:center;font-size:14px;margin:2mm 0;}' +
+          '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+          'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
+          'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+          '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
+          '@page{width:80mm;margin:0;}' +
+          '</style></head><body>' +
+          '<h2>VENECIA</h2>' +
+          '<div class="sub">Helados Artesanales</div>' +
+          '<div class="sub">' + (sesion.sucursal ? sesion.sucursal.nombre : '') + '</div>' +
+          '<hr>' +
+          '<div class="sub">' + nuevaVenta.fecha + ' ' + nuevaVenta.hora + '</div>' +
+          '<div class="sub">Atendio: ' + sesion.usuario.nombre + '</div>' +
+          '<div class="sub">Ticket #' + String(nuevaVenta.id).slice(-5) + '</div>' +
+          '<hr>' +
+          '<table>' + items + '</table>' +
+          '<hr>' +
+          '<div class="total">TOTAL: $' + Number(nuevaVenta.total).toLocaleString('es-AR') + '</div>' +
+          '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
+          (nuevaVenta.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(nuevaVenta.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
+          '<hr><div class="sub">Gracias por su visita!</div>' +
+          '</body></html>';
+        imprimirHTML(html);
+      }
+    }, 200);
   };
 
   // Calcular totales de pagos mixtos
@@ -1078,8 +1134,48 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     });
     setTicketCierre(cajaCerrada);
     setMostrarCierre(false);
-    // Imprimir automáticamente
-    setTimeout(function() { window.print(); }, 300);
+    // Imprimir cierre via iframe
+    setTimeout(function() {
+      var ef = ventasCaja.filter(function(v){return v.formaPago==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
+      var tj = ventasCaja.filter(function(v){return v.formaPago==="tarjeta";}).reduce(function(s,v){return s+v.total;},0);
+      var qr = ventasCaja.filter(function(v){return v.formaPago==="qr";}).reduce(function(s,v){return s+v.total;},0);
+      var co = ventasCaja.filter(function(v){return v.formaPago==="consumo";}).reduce(function(s,v){return s+v.total;},0);
+      var retirosC = (data.retiros||[]).filter(function(r){return r.cajaId===caja.id;});
+      var totalRet = retirosC.reduce(function(s,r){return s+r.monto;},0);
+      var efFisico = ef - totalRet + (caja.montoInicial||0);
+      var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR'); };
+      var filasRetiros = retirosC.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
+      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+        'body{font-family:Courier New,monospace;font-size:11px;width:76mm;margin:0;padding:2mm;}' +
+        'h2{text-align:center;font-size:14px;margin:2mm 0;}' +
+        '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+        'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
+        'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+        '.total{font-size:13px;font-weight:bold;border-top:1px solid #000;padding-top:1mm;margin-top:1mm;}' +
+        '.efisico{text-align:center;font-size:13px;font-weight:bold;border:1px solid #000;padding:2mm;margin:2mm 0;}' +
+        '@page{width:80mm;margin:0;}' +
+        '</style></head><body>' +
+        '<h2>VENECIA - CIERRE</h2>' +
+        '<div class="sub">' + (sesion.sucursal ? sesion.sucursal.nombre : '') + '</div>' +
+        '<div class="sub">Cajera: ' + sesion.usuario.nombre + '</div>' +
+        '<div class="sub">Apertura: ' + (caja.horaApertura||'') + ' | Cierre: ' + horaCierre + '</div>' +
+        '<hr>' +
+        '<table>' +
+        '<tr><td>Ventas del turno</td><td align="right">' + ventasCaja.length + '</td></tr>' +
+        '<tr><td>Total ventas</td><td align="right">' + fmt2(totalCaja) + '</td></tr>' +
+        '</table><hr>' +
+        '<table>' +
+        '<tr><td>Efectivo</td><td align="right">' + fmt2(ef) + '</td></tr>' +
+        '<tr><td>Tarjeta/Debito</td><td align="right">' + fmt2(tj) + '</td></tr>' +
+        '<tr><td>QR/Transfer.</td><td align="right">' + fmt2(qr) + '</td></tr>' +
+        (co > 0 ? '<tr><td>Consumo empl.</td><td align="right">' + fmt2(co) + '</td></tr>' : '') +
+        filasRetiros +
+        '</table><hr>' +
+        '<div class="efisico">EFECTIVO FISICO: ' + fmt2(efFisico) + '</div>' +
+        '<hr><div class="sub">Fin del turno</div>' +
+        '</body></html>';
+      imprimirHTML(html);
+    }, 200);
   };
 
   const ventasCaja = data.ventas.filter(v => v.cajaId === caja.id);
