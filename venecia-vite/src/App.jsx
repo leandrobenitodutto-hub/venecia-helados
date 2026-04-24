@@ -1023,6 +1023,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     });
     setTicketVenta(nuevaVenta);
     setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre("");
+    // Imprimir automáticamente
+    setTimeout(function() { window.print(); }, 300);
   };
 
   // Calcular totales de pagos mixtos
@@ -1070,6 +1072,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     });
     setTicketCierre(cajaCerrada);
     setMostrarCierre(false);
+    // Imprimir automáticamente
+    setTimeout(function() { window.print(); }, 300);
   };
 
   const ventasCaja = data.ventas.filter(v => v.cajaId === caja.id);
