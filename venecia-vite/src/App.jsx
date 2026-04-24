@@ -1715,6 +1715,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "resultados", icon: "💰", label: "Resultados" },
     { key: "caja", icon: "🏪", label: "Caja" },
     { key: "consumos", icon: "👤", label: "Consumos" },
+    { key: "retiros", icon: "💸", label: "Retiros" },
     { key: "productos", icon: "🍦", label: "Productos" },
     { key: "usuarios", icon: "👥", label: "Usuarios" },
   ];
@@ -1839,6 +1840,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "resultados" && <TabResultados data={data} />}
           {tab === "caja" && <TabCaja data={data} />}
           {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
+          {tab === "retiros" && <TabRetiros data={data} setData={setData} />}
           {tab === "productos" && <TabProductos data={data} setData={setData} />}
           {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
         </div>
@@ -1887,7 +1889,7 @@ function Dashboard({ data }) {
     if (tipo === "hoy") { setDesde(hoyStr); setHasta(hoyStr); }
     else if (tipo === "ayer") {
       const ayer = new Date(); ayer.setDate(ayer.getDate()-1);
-      const s = ayer.toISOString().slice(0,10); setDesde(s); setHasta(s);
+      const s = ayer.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }); setDesde(s); setHasta(s);
     }
     else if (tipo === "semana") {
       const lunes = new Date(); lunes.setDate(lunes.getDate() - lunes.getDay() + 1);
@@ -2559,6 +2561,17 @@ function TabResultados({ data }) {
               </div>
             );
           })}
+          {/* Subtotales */}
+          <div style={{ borderTop:"2px solid " + C.violetaLight, marginTop:8, paddingTop:12, display:"flex", flexDirection:"column", gap:6 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"#e8f5e8", borderRadius:10 }}>
+              <span style={{ fontWeight:800, fontSize:14, color:"#27ae60" }}>💵 Subtotal Efectivo</span>
+              <span style={{ fontWeight:900, fontSize:16, color:"#27ae60" }}>{fmt(porPago.efectivo || 0)}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.violetaPale, borderRadius:10 }}>
+              <span style={{ fontWeight:800, fontSize:14, color:C.violeta }}>💳📱👤🔀 Subtotal No efectivo</span>
+              <span style={{ fontWeight:900, fontSize:16, color:C.violeta }}>{fmt((porPago.tarjeta||0) + (porPago.qr||0) + (porPago.consumo||0) + (porPago.mixto||0))}</span>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -3149,6 +3162,121 @@ function TabConsumos({ data, setData }) {
         </div>
       </div>
     )}
+    </div>
+  );
+}
+
+
+// ─── TAB RETIROS (ADMIN) ─────────────────────────────────────────────────────
+function TabRetiros({ data, setData }) {
+  var hoyStr = hoy();
+  var mesStr = hoyStr.slice(0,7);
+  const [desde, setDesde] = useState(mesStr + "-01");
+  const [hasta, setHasta] = useState(hoyStr);
+  const [horaDesde, setHoraDesde] = useState("");
+  const [horaHasta, setHoraHasta] = useState("");
+  const [sucFiltro, setSucFiltro] = useState("");
+
+  var filtroStyle = { padding:"8px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, color:C.dark, outline:"none", background:C.blanco };
+
+  var retirosFiltrados = data.retiros.filter(function(r) {
+    if (r.fecha < desde || r.fecha > hasta) return false;
+    if (horaDesde && (r.hora || "00:00") < horaDesde) return false;
+    if (horaHasta && (r.hora || "00:00") > horaHasta) return false;
+    if (sucFiltro && r.sucursalNombre !== sucFiltro) return false;
+    return true;
+  }).sort(function(a,b) { return b.id - a.id; });
+
+  var totalRetiros = retirosFiltrados.reduce(function(s,r) { return s + r.monto; }, 0);
+
+  return (
+    <div>
+      <SectionTitle>Retiros de Caja</SectionTitle>
+
+      <Card style={{ marginBottom:16, padding:"14px 18px" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:11, color:C.violetaMed, fontWeight:700 }}>Desde</span>
+            <input type="date" value={desde} onChange={function(e){setDesde(e.target.value);}} style={filtroStyle} />
+            <span style={{ fontSize:11, color:C.violetaMed, fontWeight:700 }}>Hasta</span>
+            <input type="date" value={hasta} onChange={function(e){setHasta(e.target.value);}} style={filtroStyle} />
+            <span style={{ fontSize:11, color:C.violetaMed, fontWeight:700 }}>Hora desde</span>
+            <input type="time" value={horaDesde} onChange={function(e){setHoraDesde(e.target.value);}} style={filtroStyle} />
+            <span style={{ fontSize:11, color:C.violetaMed, fontWeight:700 }}>Hora hasta</span>
+            <input type="time" value={horaHasta} onChange={function(e){setHoraHasta(e.target.value);}} style={filtroStyle} />
+          </div>
+          <select value={sucFiltro} onChange={function(e){setSucFiltro(e.target.value);}} style={filtroStyle}>
+            <option value="">Todas las sucursales</option>
+            {data.sucursales.map(function(s) { return <option key={s.id} value={s.nombre}>{s.nombre}</option>; })}
+          </select>
+        </div>
+      </Card>
+
+      {/* Cards resumen */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12, marginBottom:16 }}>
+        <Card style={{ borderLeft:"4px solid #e74c3c", padding:"12px 16px" }}>
+          <div style={{ fontSize:11, color:"#aaa", fontWeight:700, marginBottom:4 }}>TOTAL RETIRADO</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#e74c3c" }}>{fmt(totalRetiros)}</div>
+          <div style={{ fontSize:12, color:"#aaa" }}>{retirosFiltrados.length} retiro{retirosFiltrados.length !== 1 ? "s" : ""}</div>
+        </Card>
+      </div>
+
+      {retirosFiltrados.length === 0 ? (
+        <Card style={{ textAlign:"center", padding:40 }}>
+          <div style={{ fontSize:40 }}>💸</div>
+          <p style={{ color:C.violetaLight, fontWeight:700 }}>No hay retiros en ese período</p>
+        </Card>
+      ) : (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:C.violetaPale }}>
+                {["Fecha", "Hora", "Sucursal", "Empleada", "Motivo", "Monto", "Acciones"].map(function(h,i) {
+                  return <th key={i} style={{ padding:"10px 14px", textAlign:i>=5?"right":"left", color:C.violeta, fontWeight:800, fontSize:11, textTransform:"uppercase" }}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {retirosFiltrados.map(function(r, idx) {
+                return (
+                  <tr key={r.id} style={{ borderTop:"1px solid " + C.violetaPale, background: idx%2===0 ? C.blanco : C.crema }}>
+                    <td style={{ padding:"9px 14px" }}>{fechaLegible(r.fecha)}</td>
+                    <td style={{ padding:"9px 14px", color:C.violetaMed }}>{r.hora}</td>
+                    <td style={{ padding:"9px 14px", color:"#888" }}>{r.sucursalNombre}</td>
+                    <td style={{ padding:"9px 14px", fontWeight:700 }}>{r.usuarioNombre}</td>
+                    <td style={{ padding:"9px 14px" }}>{r.motivo}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"right", fontWeight:900, color:"#e74c3c" }}>{fmt(r.monto)}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"right" }}>
+                      <div style={{ display:"flex", gap:4, justifyContent:"flex-end" }}>
+                        <button onClick={function() {
+                            var nuevoMotivo = window.prompt("Motivo:", r.motivo);
+                            if (nuevoMotivo === null) return;
+                            var nuevoMonto = window.prompt("Monto:", r.monto);
+                            if (nuevoMonto === null) return;
+                            actualizarRetiro(r.id, { motivo: nuevoMotivo, monto: Number(nuevoMonto) });
+                            setData(function(prev) { return { ...prev, retiros: prev.retiros.map(function(x) { return x.id===r.id ? {...x, motivo:nuevoMotivo, monto:Number(nuevoMonto)} : x; }) }; });
+                          }}
+                          style={{ padding:"4px 10px", borderRadius:8, border:"2px solid " + C.violeta, background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:C.violeta, fontFamily:"Nunito, sans-serif" }}>
+                          Editar
+                        </button>
+                        <button onClick={function() {
+                            if (window.confirm("¿Eliminar este retiro?")) {
+                              eliminarRetiro(r.id);
+                              setData(function(prev) { return { ...prev, retiros: prev.retiros.filter(function(x){ return x.id !== r.id; }) }; });
+                            }
+                          }}
+                          style={{ padding:"4px 10px", borderRadius:8, border:"2px solid #ffb3b3", background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:"#e74c3c", fontFamily:"Nunito, sans-serif" }}>
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
   );
 }
