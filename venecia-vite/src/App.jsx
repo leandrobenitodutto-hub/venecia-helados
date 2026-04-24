@@ -3001,6 +3001,8 @@ function TabConsumos({ data, setData }) {
   var totalFiltrado = consumosFiltrados.reduce(function(s,c) { return s + c.total; }, 0);
 
   const [detalleId, setDetalleId] = useState(null);
+  const [consumoEditando, setConsumoEditando] = useState(null);
+  const [editConsumoNombre, setEditConsumoNombre] = useState("");
 
   var filtroStyle = { padding:"8px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, color:C.dark, outline:"none", background:C.blanco };
 
