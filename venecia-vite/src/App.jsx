@@ -209,6 +209,21 @@ async function eliminarVenta(id) {
   await supabase.from('ventas').delete().eq('id', id)
 }
 
+async function eliminarRetiro(id) {
+  await supabase.from('retiros').delete().eq('id', id)
+}
+
+async function actualizarRetiro(id, cambios) {
+  await supabase.from('retiros').update({
+    motivo: cambios.motivo,
+    monto: cambios.monto,
+  }).eq('id', id)
+}
+
+async function eliminarConsumo(id) {
+  await supabase.from('consumos_empleado').delete().eq('id', id)
+}
+
 
 // ─── PALETA VENECIA ──────────────────────────────────────────────────────────
 const C = {
@@ -1823,7 +1838,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "ventas" && <TabVentas data={data} setData={setData} />}
           {tab === "resultados" && <TabResultados data={data} />}
           {tab === "caja" && <TabCaja data={data} />}
-          {tab === "consumos" && <TabConsumos data={data} />}
+          {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
           {tab === "productos" && <TabProductos data={data} setData={setData} />}
           {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
         </div>
@@ -2666,9 +2681,31 @@ function TabCaja({ data }) {
                   <div style={{ fontWeight:800, color:"#e74c3c", fontSize:13, marginBottom:6 }}>💸 Retiros de caja</div>
                   {retirosAdm.map(function(r) {
                     return (
-                      <div key={r.id} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid #ffcdd2" }}>
+                      <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:12, padding:"4px 0", borderBottom:"1px solid #ffcdd2" }}>
                         <span style={{ color:"#555" }}>{r.hora} · {r.motivo}</span>
-                        <span style={{ fontWeight:800, color:"#e74c3c" }}>{fmt(r.monto)}</span>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <span style={{ fontWeight:800, color:"#e74c3c" }}>{fmt(r.monto)}</span>
+                          <button onClick={function() {
+                              var nuevoMotivo = window.prompt("Motivo:", r.motivo);
+                              if (nuevoMotivo === null) return;
+                              var nuevoMonto = window.prompt("Monto:", r.monto);
+                              if (nuevoMonto === null) return;
+                              actualizarRetiro(r.id, { motivo: nuevoMotivo, monto: Number(nuevoMonto) });
+                              setData(function(prev) { return { ...prev, retiros: prev.retiros.map(function(x) { return x.id===r.id ? {...x, motivo:nuevoMotivo, monto:Number(nuevoMonto)} : x; }) }; });
+                            }}
+                            style={{ padding:"2px 6px", borderRadius:6, border:"2px solid " + C.violetaLight, background:"white", cursor:"pointer", fontSize:10, fontWeight:700, color:C.violeta }}>
+                            ✏️
+                          </button>
+                          <button onClick={function() {
+                              if (window.confirm("¿Eliminar este retiro?")) {
+                                eliminarRetiro(r.id);
+                                setData(function(prev) { return { ...prev, retiros: prev.retiros.filter(function(x){ return x.id !== r.id; }) }; });
+                              }
+                            }}
+                            style={{ padding:"2px 6px", borderRadius:6, border:"2px solid #ffb3b3", background:"white", cursor:"pointer", fontSize:10, fontWeight:700, color:"#e74c3c" }}>
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -2946,7 +2983,7 @@ function TabInsumos({ data, setData }) {
 
 
 // ─── TAB CONSUMOS EMPLEADO (ADMIN) ───────────────────────────────────────────
-function TabConsumos({ data }) {
+function TabConsumos({ data, setData }) {
   var hoyStr = hoy();
   var mesStr = hoyStr.slice(0,7);
   const [desde, setDesde] = useState(mesStr + "-01");
@@ -3023,7 +3060,7 @@ function TabConsumos({ data }) {
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead>
               <tr style={{ background:C.violetaPale }}>
-                {["Fecha", "Hora", "Empleada", "Sucursal", "Productos", "Total", ""].map(function(h,i) {
+                {["Fecha", "Hora", "Empleada", "Sucursal", "Productos", "Total", "Acciones"].map(function(h,i) {
                   return <th key={i} style={{ padding:"10px 14px", textAlign: i > 3 ? "right" : "left", color:C.violeta, fontWeight:800, fontSize:11, textTransform:"uppercase" }}>{h}</th>;
                 })}
               </tr>
@@ -3064,6 +3101,52 @@ function TabConsumos({ data }) {
           </table>
         </Card>
       )}
+    {/* Modal editar consumo */}
+    {consumoEditando && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(45,21,89,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:20 }}>
+        <div style={{ background:"white", borderRadius:20, padding:"28px 24px", maxWidth:380, width:"100%", fontFamily:"Nunito, sans-serif", boxShadow:"0 24px 60px rgba(91,45,142,0.4)" }}>
+          <h3 style={{ margin:"0 0 16px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>Editar consumo</h3>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:6, textTransform:"uppercase" }}>Empleada que consumió</label>
+            <input type="text" value={editConsumoNombre}
+              onChange={function(e){ setEditConsumoNombre(e.target.value); }}
+              style={{ width:"100%", padding:"11px 14px", borderRadius:12, border:"2px solid " + C.violetaLight, fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:600, boxSizing:"border-box", outline:"none" }} />
+          </div>
+          <div style={{ marginBottom:16, background:C.violetaPale, borderRadius:12, padding:"10px 14px" }}>
+            <div style={{ fontSize:12, color:C.violetaMed, fontWeight:700, marginBottom:6 }}>Productos</div>
+            {consumoEditando.items && consumoEditando.items.map(function(it,i) {
+              return (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"3px 0" }}>
+                  <span>{it.nombre} x{it.cantidad}</span>
+                  <span style={{ fontWeight:700 }}>{fmt(it.subtotal)}</span>
+                </div>
+              );
+            })}
+            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:900, color:C.violeta, fontSize:14, borderTop:"1px solid " + C.violetaLight, paddingTop:6, marginTop:4 }}>
+              <span>Total</span><span>{fmt(consumoEditando.total)}</span>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={function(){ setConsumoEditando(null); }}
+              style={{ flex:1, padding:"11px", borderRadius:12, border:"2px solid " + C.violetaLight, background:"white", cursor:"pointer", fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
+              Cancelar
+            </button>
+            <button onClick={function() {
+                supabase.from('consumos_empleado').update({ usuario_nombre: editConsumoNombre }).eq('id', consumoEditando.id);
+                setData(function(prev) {
+                  return { ...prev, consumosEmpleado: prev.consumosEmpleado.map(function(c) {
+                    return c.id === consumoEditando.id ? { ...c, usuarioNombre: editConsumoNombre, usuario_nombre: editConsumoNombre } : c;
+                  })};
+                });
+                setConsumoEditando(null);
+              }}
+              style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:"white", fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
+              Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
