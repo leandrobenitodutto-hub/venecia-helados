@@ -432,7 +432,7 @@ const hoy = () => {
   var d = new Date();
   return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 };
-const ahora = () => new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+const ahora = () => new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hour12: false });
 const fechaLegible = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 // Filtra ventas por rango de hora "HH:MM"
@@ -2016,8 +2016,8 @@ function Dashboard({ data }) {
       const s = ayer.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }); setDesde(s); setHasta(s);
     }
     else if (tipo === "semana") {
-      const lunes = new Date(); lunes.setDate(lunes.getDate() - lunes.getDay() + 1);
-      setDesde(lunes.toISOString().slice(0,10)); setHasta(hoyStr);
+      const lunes = new Date(); lunes.setDate(lunes.getDate() - (lunes.getDay() === 0 ? 6 : lunes.getDay() - 1));
+      setDesde(lunes.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })); setHasta(hoyStr);
     }
     else if (tipo === "mes") { setDesde(hoyStr.slice(0,7)+"-01"); setHasta(hoyStr); }
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
@@ -2238,8 +2238,8 @@ function TabVentas({ data }) {
       setDesde(ayerStr); setHasta(ayerStr);
     }
     else if (tipo === "semana") {
-      const lunes = new Date(); lunes.setDate(lunes.getDate() - lunes.getDay() + 1);
-      setDesde(lunes.toISOString().slice(0,10)); setHasta(hoyStr);
+      const lunes = new Date(); lunes.setDate(lunes.getDate() - (lunes.getDay() === 0 ? 6 : lunes.getDay() - 1));
+      setDesde(lunes.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })); setHasta(hoyStr);
     }
     else if (tipo === "mes") { setDesde(hoyStr.slice(0,7) + "-01"); setHasta(hoyStr); }
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
@@ -2567,8 +2567,8 @@ function TabResultados({ data }) {
     const mesStr = hoyStr.slice(0,7);
     if (tipo === "hoy") { setDesde(hoyStr); setHasta(hoyStr); }
     else if (tipo === "semana") {
-      const lunes = new Date(); lunes.setDate(lunes.getDate() - lunes.getDay() + 1);
-      setDesde(lunes.toISOString().slice(0,10)); setHasta(hoyStr);
+      const lunes = new Date(); lunes.setDate(lunes.getDate() - (lunes.getDay() === 0 ? 6 : lunes.getDay() - 1));
+      setDesde(lunes.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })); setHasta(hoyStr);
     }
     else if (tipo === "mes") { setDesde(mesStr + "-01"); setHasta(hoyStr); }
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
