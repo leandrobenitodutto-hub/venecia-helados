@@ -35,6 +35,7 @@ async function cargarDatos() {
     { data: cajas },
     { data: retiros },
     { data: consumosEmpleado },
+    { data: historialPrecios },
     ventas,
   ] = await Promise.all([
     supabase.from('sucursales').select('*').order('id'),
@@ -44,6 +45,7 @@ async function cargarDatos() {
     supabase.from('cajas').select('*').order('id'),
     supabase.from('retiros').select('*').order('id'),
     supabase.from('consumos_empleado').select('*').order('id'),
+    supabase.from('historial_precios').select('*').order('id', { ascending: false }),
     cargarTodasLasVentas(),
   ])
 
@@ -80,6 +82,7 @@ async function cargarDatos() {
       usuarioNombre: r.usuario_nombre,
       sucursalNombre: r.sucursal_nombre,
     })),
+    historialPrecios: historialPrecios || [],
     consumosEmpleado: (consumosEmpleado || []).map(c => ({
       ...c,
       cajaId: c.caja_id,
@@ -169,6 +172,20 @@ async function guardarConsumo(consumo) {
     items: consumo.items,
     total: consumo.total,
   })
+}
+
+async function registrarCambioPrecio(productoId, nombreProducto, precioAnterior, precioNuevo, costoAnterior, costoNuevo) {
+  if (precioAnterior === precioNuevo && costoAnterior === costoNuevo) return;
+  await supabase.from('historial_precios').insert({
+    producto_id: productoId,
+    producto_nombre: nombreProducto,
+    precio_anterior: precioAnterior,
+    precio_nuevo: precioNuevo,
+    costo_anterior: costoAnterior,
+    costo_nuevo: costoNuevo,
+    fecha: hoy(),
+    hora: ahora(),
+  });
 }
 
 async function guardarProducto(producto) {
@@ -1989,12 +2006,18 @@ const Card = ({ children, style = {} }) => (
   </div>
 );
 
-const StatCard = ({ label, value, sub, color, icon }) => (
+const StatCard = ({ label, value, sub, color, icon, variacion }) => (
   <Card style={{ borderTop: `4px solid ${color}`, position: "relative", overflow: "hidden" }}>
     <div style={{ position: "absolute", top: -15, right: -10, fontSize: 50, opacity: 0.08 }}>{icon}</div>
     <div style={{ fontSize: 11, color: "#999", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{label}</div>
     <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "Baloo 2, cursive" }}>{value}</div>
     <div style={{ fontSize: 12, color: "#aaa", marginTop: 4, fontWeight: 600 }}>{sub}</div>
+    {variacion && (
+      <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, background: variacion.sube ? "#e8f8f0" : "#fdecea", borderRadius: 8, padding: "2px 8px" }}>
+        <span style={{ fontSize: 13 }}>{variacion.sube ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: variacion.sube ? "#27ae60" : "#e74c3c" }}>{variacion.pct}% vs período ant.</span>
+      </div>
+    )}
   </Card>
 );
 
@@ -2037,6 +2060,26 @@ function Dashboard({ data }) {
   const gananciaPeriodo = brutoPeriodo - costoPeriodo;
   const margenPeriodo  = brutoPeriodo > 0 ? ((gananciaPeriodo/brutoPeriodo)*100).toFixed(1) : 0;
 
+  // Período anterior (mismo rango de días, hacia atrás)
+  const diasPeriodo = Math.max(1, (new Date(hasta) - new Date(desde)) / 86400000 + 1);
+  const desdeAnt = new Date(desde); desdeAnt.setDate(desdeAnt.getDate() - diasPeriodo);
+  const hastaAnt = new Date(desde); hastaAnt.setDate(hastaAnt.getDate() - 1);
+  const desdeAntStr = desdeAnt.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const hastaAntStr = hastaAnt.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const ventasAnt = ventasSuc.filter(v => v.fecha >= desdeAntStr && v.fecha <= hastaAntStr);
+  const brutoAnt = ventasAnt.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
+  const gananciaAnt = brutoAnt - ventasAnt.reduce((s,v) => s + v.costo_total, 0);
+  const ticketAnt = ventasAnt.length > 0 ? Math.round(brutoAnt / ventasAnt.length) : 0;
+  const variacion = (actual, anterior) => {
+    if (anterior === 0) return null;
+    const pct = ((actual - anterior) / anterior * 100).toFixed(1);
+    return { pct, sube: actual >= anterior };
+  };
+  const varTotal    = variacion(brutoPeriodo, brutoAnt);
+  const varGanancia = variacion(gananciaPeriodo, gananciaAnt);
+  const varTicket   = variacion(ventasFiltradas.length > 0 ? Math.round(brutoPeriodo/ventasFiltradas.length) : 0, ticketAnt);
+  const varTx       = variacion(ventasFiltradas.length, ventasAnt.length);
+
   const porSucursal = data.sucursales.map(s => {
     const vs = ventasFiltradas.filter(v => v.sucursal_id === s.id);
     return { nombre: s.nombre, total: vs.reduce((a,v) => a + (v.items || []).reduce((x,i) => x + (i.subtotal || 0), 0), 0), cantidad: vs.length };
@@ -2054,6 +2097,27 @@ function Dashboard({ data }) {
     return { hora: String(h).padStart(2,"0")+":00", total: vs.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0), cantidad: vs.length };
   });
   const maxHora = Math.max(...horasConVentas.map(h => h.total), 1);
+
+  // Gráfico ventas por día del período
+  const ventasPorDia = (() => {
+    const dias = [];
+    const d = new Date(desde + "T12:00:00");
+    const h = new Date(hasta + "T12:00:00");
+    while (d <= h) {
+      const fechaStr = d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      const vs = ventasFiltradas.filter(v => v.fecha === fechaStr);
+      dias.push({
+        fecha: fechaStr,
+        label: d.toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit" }),
+        total: vs.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0),
+        cantidad: vs.length
+      });
+      d.setDate(d.getDate() + 1);
+    }
+    return dias;
+  })();
+  const maxDia = Math.max(...ventasPorDia.map(d => d.total), 1);
+  const mostrarGraficoDias = ventasPorDia.length > 1;
 
   const filtroStyle = { padding:"7px 10px", borderRadius:10, border:`2px solid ${C.violetaLight}`, fontSize:12, fontFamily:"Nunito, sans-serif", fontWeight:600, color:C.dark, outline:"none", background:C.blanco };
 
@@ -2104,11 +2168,54 @@ function Dashboard({ data }) {
 
       {/* Tarjetas */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10, marginBottom:16 }}>
-        <StatCard label="Total vendido"   value={fmt(totalPeriodo)}    sub={`${ventasFiltradas.length} transacciones`} color={C.violeta} icon="🍦" />
+        <StatCard label="Total vendido"   value={fmt(totalPeriodo)}    sub={`${ventasFiltradas.length} transacciones`} color={C.violeta} icon="🍦" variacion={varTotal} />
         <StatCard label="Costo de ventas" value={fmt(costoPeriodo)}    sub="Mercadería vendida"  color="#e74c3c" icon="📦" />
-        <StatCard label="Ganancia bruta"  value={fmt(gananciaPeriodo)} sub={`Margen: ${margenPeriodo}%`} color="#27ae60" icon="💰" />
-        <StatCard label="Ticket promedio" value={ventasFiltradas.length > 0 ? fmt(Math.round(totalPeriodo/ventasFiltradas.length)) : "$0"} sub="Por venta" color="#2980b9" icon="🧾" />
+        <StatCard label="Ganancia bruta"  value={fmt(gananciaPeriodo)} sub={`Margen: ${margenPeriodo}%`} color="#27ae60" icon="💰" variacion={varGanancia} />
+        <StatCard label="Ticket promedio" value={ventasFiltradas.length > 0 ? fmt(Math.round(totalPeriodo/ventasFiltradas.length)) : "$0"} sub="Por venta" color="#2980b9" icon="🧾" variacion={varTicket} />
       </div>
+
+      {/* Gráfico por día — solo si hay más de 1 día */}
+      {mostrarGraficoDias && (
+        <Card style={{ marginBottom:16 }}>
+          <h4 style={{ margin:"0 0 16px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>
+            Evolución de ventas por día
+          </h4>
+          <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:120, paddingBottom:28, position:"relative", borderBottom:`2px solid ${C.violetaPale}`, overflowX:"auto" }}>
+            {ventasPorDia.map((d, i) => {
+              const pct = maxDia > 0 ? (d.total / maxDia) * 100 : 0;
+              return (
+                <div key={d.fecha} style={{ flex:"0 0 auto", minWidth: ventasPorDia.length > 20 ? 24 : 36, display:"flex", flexDirection:"column", alignItems:"center", height:"100%", justifyContent:"flex-end", position:"relative" }}>
+                  {d.total > 0 && (
+                    <div style={{ position:"absolute", top:-18, fontSize:8, fontWeight:800, color:C.violeta, whiteSpace:"nowrap" }}>
+                      {fmt(d.total)}
+                    </div>
+                  )}
+                  <div style={{
+                    width:"80%", borderRadius:"4px 4px 0 0",
+                    height:`${Math.max(pct, d.total > 0 ? 4 : 0)}%`,
+                    background: d.total > 0 ? `linear-gradient(180deg, ${C.violetaMed}, ${C.violeta})` : C.violetaPale,
+                    transition:"height 0.4s ease"
+                  }} />
+                  <div style={{ position:"absolute", bottom:-22, fontSize:8, color:"#888", fontWeight:600, whiteSpace:"nowrap", textAlign:"center" }}>
+                    {d.label}
+                    {d.cantidad > 0 && <><br/><span style={{ color:C.violeta, fontWeight:800 }}>{d.cantidad}v</span></>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {/* Top 3 días */}
+          <div style={{ marginTop:16, display:"flex", gap:8, flexWrap:"wrap" }}>
+            {[...ventasPorDia].sort((a,b) => b.total - a.total).slice(0,3).map((d,i) => (
+              <div key={d.fecha} style={{ display:"flex", alignItems:"center", gap:6, background:C.violetaPale, borderRadius:10, padding:"6px 12px" }}>
+                <span style={{ fontSize:14 }}>{["🥇","🥈","🥉"][i]}</span>
+                <span style={{ fontSize:12, fontWeight:800, color:C.violeta }}>{d.label}</span>
+                <span style={{ fontSize:12, fontWeight:700, color:"#555" }}>{fmt(d.total)} · {d.cantidad} ventas</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Gráfico por hora */}
       <Card style={{ marginBottom:16 }}>
@@ -2175,6 +2282,41 @@ function Dashboard({ data }) {
           </div>
         )}
       </Card>
+
+      {/* Gráfico ventas por día */}
+      {ventasPorDia.length > 1 && (
+        <Card style={{ marginBottom:16 }}>
+          <h4 style={{ margin:"0 0 16px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>
+            Ventas por día del período
+          </h4>
+          <div style={{ overflowX:"auto" }}>
+            <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:120, paddingBottom:28, minWidth: ventasPorDia.length * 36, borderBottom:`2px solid ${C.violetaPale}` }}>
+              {ventasPorDia.map((d) => {
+                const pct = maxDia > 0 ? (d.total / maxDia) * 100 : 0;
+                return (
+                  <div key={d.fecha} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", height:"100%", justifyContent:"flex-end", position:"relative", minWidth:32 }}>
+                    {d.total > 0 && (
+                      <div style={{ position:"absolute", top:-18, fontSize:9, fontWeight:800, color:C.violeta, whiteSpace:"nowrap" }}>
+                        {fmt(d.total)}
+                      </div>
+                    )}
+                    <div style={{
+                      width:"70%", borderRadius:"4px 4px 0 0",
+                      height:`${Math.max(pct, d.total > 0 ? 4 : 0)}%`,
+                      background: d.total > 0 ? `linear-gradient(180deg, ${C.violetaMed}, ${C.violeta})` : C.violetaPale,
+                      transition:"height 0.4s ease"
+                    }} />
+                    <div style={{ position:"absolute", bottom:-26, fontSize:9, color:"#888", fontWeight:600, whiteSpace:"nowrap", textAlign:"center" }}>
+                      {d.label}<br/>
+                      <span style={{ color:C.violeta, fontWeight:800 }}>{d.cantidad > 0 ? d.cantidad + "v" : ""}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:14 }}>
         <Card>
@@ -2592,12 +2734,17 @@ function TabResultados({ data }) {
 
   const porProducto = {};
   ventasFiltradas.forEach((v) => v.items.forEach((item) => {
-    if (!porProducto[item.nombre]) porProducto[item.nombre] = { nombre: item.nombre, cantidad: 0, ingresos: 0, costos: 0 };
+    if (!porProducto[item.nombre]) porProducto[item.nombre] = { nombre: item.nombre, cantidad: 0, ingresos: 0, costos: 0, kgVendidos: 0 };
     porProducto[item.nombre].cantidad += item.cantidad;
     porProducto[item.nombre].ingresos += item.subtotal;
     porProducto[item.nombre].costos += item.costo_total;
+    // Buscar stockKg del producto para calcular kg vendidos
+    const prod = data.productos.find(p => p.id === item.id || p.nombre === item.nombre);
+    const kgUnitario = prod ? (prod.stockKg || 0) : 0;
+    porProducto[item.nombre].kgVendidos += kgUnitario * item.cantidad;
   }));
   const tablaProductos = Object.values(porProducto).sort((a, b) => b.ingresos - a.ingresos);
+  const totalKgVendidos = tablaProductos.reduce((s, p) => s + p.kgVendidos, 0);
 
   const porPago = { efectivo: 0, tarjeta: 0, qr: 0 };
   ventasFiltradas.forEach((v) => { porPago[v.formaPago] = (porPago[v.formaPago] || 0) + v.total; });
@@ -2715,7 +2862,7 @@ function TabResultados({ data }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
             <thead>
               <tr style={{ background: C.crema }}>
-                {["Producto", "Cant. vendida", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
+                {["Producto", "Cant. vendida", "Kg vendidos", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
                   <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -2728,6 +2875,9 @@ function TabResultados({ data }) {
                   <tr key={i} style={{ borderTop: `1px solid ${C.violetaPale}`, background: i % 2 === 0 ? C.blanco : C.crema }}>
                     <td style={{ padding: "10px 14px", fontWeight: 800, color: C.dark }}>{p.nombre}</td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>{p.cantidad}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#7d3c98" }}>
+                      {p.kgVendidos > 0 ? (p.kgVendidos >= 1 ? p.kgVendidos.toFixed(2) + " kg" : (p.kgVendidos * 1000).toFixed(0) + " g") : "—"}
+                    </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", color: "#2980b9", fontWeight: 800 }}>{fmt(p.ingresos)}</td>
                     <td style={{ padding: "10px 14px", textAlign: "right", color: "#e74c3c", fontWeight: 700 }}>{fmt(p.costos)}</td>
                     <td style={{ padding: "10px 14px", textAlign: "right", color: "#27ae60", fontWeight: 900 }}>{fmt(gan)}</td>
@@ -2741,6 +2891,15 @@ function TabResultados({ data }) {
                   </tr>
                 );
               })}
+              <tr style={{ background: C.violetaPale, fontWeight:900 }}>
+                <td style={{ padding:"10px 14px", color:C.violeta }}>TOTAL</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{tablaProductos.reduce((s,p)=>s+p.cantidad,0)}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#7d3c98" }}>{totalKgVendidos >= 1 ? totalKgVendidos.toFixed(2) + " kg" : (totalKgVendidos*1000).toFixed(0) + " g"}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#2980b9" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos,0))}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#e74c3c" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.costos,0))}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#27ae60" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos-p.costos,0))}</td>
+                <td></td>
+              </tr>
             </tbody>
           </table>
         </Card>
@@ -3479,7 +3638,10 @@ function TabRetiros({ data, setData }) {
 
 // ─── TAB PRODUCTOS ─────────────────────────────────────────────────────────────
 function TabProductos({ data, setData }) {
-  const [subTab, setSubTab] = useState("productos"); // "productos" | "insumos"
+  const [subTab, setSubTab] = useState("productos"); // "productos" | "insumos" | "historial" | "historial"
+  const [historialPrecios, setHistorialPrecios] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("venecia_historial_precios") || "[]"); } catch { return []; }
+  });
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [] });
   const emojis = ["🍦", "🍧", "🍨", "🥤", "🍌", "⭐", "🥛", "🍫", "🍓", "🍑", "🥭", "🧁", "🍬", "🍰", "🍭", "🎂", "📦", "🧊", "🍋", "❤️", "🎁", "⚡"];
@@ -3539,6 +3701,12 @@ function TabProductos({ data, setData }) {
         setData(function(prev) { return { ...prev, productos: [...prev.productos, { id: finalId, ...prodData }] }; });
       });
     } else {
+      const prodAnterior = data.productos.find(function(p) { return p.id === editando; });
+      if (prodAnterior && (prodAnterior.precio !== Number(form.precio) || prodAnterior.costo !== costoFinal)) {
+        registrarCambioPrecio(editando, form.nombre, prodAnterior.precio, Number(form.precio), prodAnterior.costo, costoFinal);
+        const entrada = { id: Date.now(), fecha: hoy(), hora: ahora(), producto_id: editando, producto_nombre: form.nombre, precio_anterior: prodAnterior.precio, precio_nuevo: Number(form.precio), costo_anterior: prodAnterior.costo, costo_nuevo: costoFinal };
+        setData(function(prev) { return { ...prev, historialPrecios: [entrada, ...(prev.historialPrecios || [])] }; });
+      }
       guardarProducto({ ...prodData, id: editando });
       setData(function(prev) { return { ...prev, productos: prev.productos.map(function(p) { return p.id === editando ? { ...p, ...prodData } : p; }) }; });
     }
@@ -3562,14 +3730,20 @@ function TabProductos({ data, setData }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <SectionTitle>Productos</SectionTitle>
-        <button onClick={() => abrirForm()} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.violeta, color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Nunito, sans-serif", boxShadow: `0 4px 14px rgba(91,45,142,0.35)` }}>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={() => abrirForm()} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.violeta, color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Nunito, sans-serif", boxShadow: `0 4px 14px rgba(91,45,142,0.35)` }}>
           + Nuevo producto
         </button>
+          <button onClick={() => setSubTab(subTab === "historial" ? "productos" : "historial")}
+            style={{ padding:"10px 20px", borderRadius:12, border:`2px solid ${C.violeta}`, background: subTab === "historial" ? C.violeta : "white", color: subTab === "historial" ? "white" : C.violeta, fontWeight:800, cursor:"pointer", fontSize:13, fontFamily:"Nunito, sans-serif" }}>
+            📋 Historial precios
+          </button>
+        </div>
       </div>
 
       {/* Sub-tabs Productos / Insumos */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {[{ key: "productos", label: "🍦 Productos" }, { key: "insumos", label: "🧂 Insumos" }].map(t => (
+        {[{ key: "productos", label: "🍦 Productos" }, { key: "insumos", label: "🧂 Insumos" }, { key: "historial", label: "📋 Historial precios" }].map(t => (
           <button key={t.key} onClick={() => setSubTab(t.key)}
             style={{ padding: "8px 20px", borderRadius: 20, border: "none", background: subTab === t.key ? C.violeta : C.violetaPale, color: subTab === t.key ? C.blanco : C.violeta, fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Nunito, sans-serif" }}>
             {t.label}
@@ -3659,6 +3833,61 @@ function TabProductos({ data, setData }) {
             })}
           </div>
         </>
+      )}
+
+      {/* Historial de precios */}
+      {subTab === "historial" && (
+        <Card style={{ padding:0, overflow:"hidden", marginBottom:16 }}>
+          <div style={{ padding:"16px 20px", background:C.violetaPale, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <h4 style={{ margin:0, color:C.violeta, fontFamily:"Baloo 2, cursive" }}>📋 Historial de cambios de precio</h4>
+            {historialPrecios.length > 0 && (
+              <button onClick={() => { if(window.confirm("¿Borrar todo el historial?")) { setHistorialPrecios([]); localStorage.removeItem("venecia_historial_precios"); }}}
+                style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#ffe8e8", color:"#e74c3c", fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif" }}>
+                Limpiar historial
+              </button>
+            )}
+          </div>
+          {historialPrecios.length === 0 ? (
+            <div style={{ padding:"32px", textAlign:"center", color:"#aaa", fontSize:14 }}>
+              Sin cambios registrados aún. Los cambios se registran cuando editás el precio o costo de un producto.
+            </div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:600 }}>
+                <thead>
+                  <tr style={{ background:C.crema }}>
+                    {["Fecha","Hora","Producto","Precio anterior","Precio nuevo","Var. precio","Costo anterior","Costo nuevo","Var. costo"].map((h,i) => (
+                      <th key={i} style={{ padding:"10px 12px", textAlign: i < 3 ? "left" : "right", color:C.violeta, fontWeight:800, fontSize:10, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {historialPrecios.map((h, i) => {
+                    const varPrecio = h.precioAnterior > 0 ? ((h.precioNuevo - h.precioAnterior) / h.precioAnterior * 100).toFixed(1) : null;
+                    const varCosto  = h.costoAnterior  > 0 ? ((h.costoNuevo  - h.costoAnterior)  / h.costoAnterior  * 100).toFixed(1) : null;
+                    return (
+                      <tr key={i} style={{ borderTop:`1px solid ${C.violetaPale}`, background: i%2===0 ? C.blanco : C.crema }}>
+                        <td style={{ padding:"9px 12px", fontWeight:700 }}>{fechaLegible(h.fecha)}</td>
+                        <td style={{ padding:"9px 12px", color:"#888" }}>{h.hora}</td>
+                        <td style={{ padding:"9px 12px", fontWeight:800, color:C.violeta }}>{h.productoNombre}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmt(h.precioAnterior)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmt(h.precioNuevo)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right" }}>
+                          {varPrecio && <span style={{ fontSize:11, fontWeight:800, color: Number(varPrecio)>=0?"#27ae60":"#e74c3c", background: Number(varPrecio)>=0?"#eafaf1":"#fdecea", borderRadius:6, padding:"2px 6px" }}>{Number(varPrecio)>=0?"▲":"▼"} {Math.abs(varPrecio)}%</span>}
+                        </td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmt(h.costoAnterior)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmt(h.costoNuevo)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right" }}>
+                          {varCosto && <span style={{ fontSize:11, fontWeight:800, color: Number(varCosto)>=0?"#e74c3c":"#27ae60", background: Number(varCosto)>=0?"#fdecea":"#eafaf1", borderRadius:6, padding:"2px 6px" }}>{Number(varCosto)>=0?"▲":"▼"} {Math.abs(varCosto)}%</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
 
       {/* Modal editar/nuevo producto */}
@@ -3773,6 +4002,45 @@ function TabProductos({ data, setData }) {
             </div>
           </Card>
         </div>
+      )}
+
+      {subTab === "historial" && (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"16px 20px", background:C.violetaPale }}>
+            <h4 style={{ margin:0, color:C.violeta, fontFamily:"Baloo 2, cursive" }}>Historial de cambios de precio</h4>
+          </div>
+          {(data.historialPrecios || []).length === 0 ? (
+            <div style={{ padding:"32px", textAlign:"center", color:"#aaa", fontWeight:700 }}>
+              No hay cambios registrados aún. Los próximos cambios de precio y costo aparecerán acá.
+            </div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead>
+                <tr style={{ background:C.crema }}>
+                  {["Fecha","Producto","Precio ant.","Precio nuevo","Costo ant.","Costo nuevo"].map((h,i) => (
+                    <th key={i} style={{ padding:"10px 14px", textAlign: i < 2 ? "left" : "right", color:C.violeta, fontWeight:800, fontSize:11, textTransform:"uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(data.historialPrecios || []).map((h, i) => (
+                  <tr key={h.id} style={{ borderTop:`1px solid ${C.violetaPale}`, background: i%2===0 ? C.blanco : C.crema }}>
+                    <td style={{ padding:"10px 14px", color:"#888", fontWeight:600 }}>{fechaLegible(h.fecha)} {h.hora}</td>
+                    <td style={{ padding:"10px 14px", fontWeight:800 }}>{h.producto_nombre}</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmt(h.precio_anterior)}</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:800, color: h.precio_nuevo > h.precio_anterior ? "#e74c3c" : "#27ae60" }}>
+                      {h.precio_nuevo > h.precio_anterior ? "▲" : "▼"} {fmt(h.precio_nuevo)}
+                    </td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmt(h.costo_anterior)}</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:800, color: h.costo_nuevo > h.costo_anterior ? "#e74c3c" : "#27ae60" }}>
+                      {h.costo_nuevo !== h.costo_anterior ? (h.costo_nuevo > h.costo_anterior ? "▲" : "▼") : "="} {fmt(h.costo_nuevo)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
       )}
     </div>
   );
