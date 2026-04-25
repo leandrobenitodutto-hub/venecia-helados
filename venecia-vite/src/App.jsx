@@ -435,15 +435,13 @@ const hoy = () => {
 const ahora = () => new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hour12: false });
 const fechaLegible = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-// Filtra ventas por rango de hora "HH:MM"
-const filtrarPorHora = (ventas, horaDesde, horaHasta) => {
+// Filtra ventas por rango fecha+hora combinado "YYYY-MM-DD HH:MM"
+const filtrarPorHora = (ventas, horaDesde, horaHasta, desde, hasta) => {
   if (!horaDesde && !horaHasta) return ventas;
-  return ventas.filter(v => {
-    const h = v.hora || "00:00";
-    if (horaDesde && h < horaDesde) return false;
-    if (horaHasta && h > horaHasta) return false;
-    return true;
-  });
+  const dt = v => (v.fecha || "0000-00-00") + " " + (v.hora || "00:00").slice(0,5);
+  const desdeDT = desde + " " + (horaDesde || "00:00");
+  const hastaDT = hasta + " " + (horaHasta || "23:59");
+  return ventas.filter(v => dt(v) >= desdeDT && dt(v) <= hastaDT);
 };
 
 // Calcula el costo de un producto según su tipo (fijo o receta)
@@ -2027,7 +2025,7 @@ function Dashboard({ data }) {
     v.fecha >= desde && v.fecha <= hasta &&
     (!sucFiltro || v.sucursal_id === Number(sucFiltro))
   );
-  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta);
+  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta, desde, hasta);
 
   const brutoPeriodo   = ventasFiltradas.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
   const totalPeriodo   = brutoPeriodo;
@@ -2248,7 +2246,7 @@ function TabVentas({ data }) {
   const ventasPorFecha = data.ventas.filter(v =>
     v.fecha >= desde && v.fecha <= hasta && (!filtroSuc || v.sucursal_id === Number(filtroSuc))
   );
-  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta).sort((a,b) => b.id - a.id);
+  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta, desde, hasta).sort((a,b) => b.id - a.id);
   const totalFiltrado = ventasFiltradas.reduce((s, v) => s + v.total, 0);
   const costoFiltrado = ventasFiltradas.reduce((s, v) => s + v.costo_total, 0);
 
@@ -2578,7 +2576,7 @@ function TabResultados({ data }) {
     v.fecha >= desde && v.fecha <= hasta &&
     (!sucFiltro || v.sucursal_id === Number(sucFiltro))
   );
-  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta);
+  const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta, desde, hasta);
   const ingresos = ventasFiltradas.reduce((s, v) => s + v.total, 0);
   const costos = ventasFiltradas.reduce((s, v) => s + v.costo_total, 0);
   const ganancia = ingresos - costos;
