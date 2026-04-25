@@ -2347,7 +2347,9 @@ function TabVentas({ data }) {
                     <button onClick={function() {
                         if (window.confirm("¿Eliminar esta venta? Esta acción no se puede deshacer.")) {
                           eliminarVenta(v.id);
-                          setData(function(prev) { return { ...prev, ventas: prev.ventas.filter(function(x){ return x.id !== v.id; }) }; });
+                          setData(function(prev) {
+                            return { ...prev, ventas: prev.ventas.filter(function(x){ return x.id !== v.id; }) };
+                          });
                         }
                       }}
                       style={{ padding:"4px 10px", borderRadius:8, border:"2px solid #ffb3b3", background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:"#e74c3c", fontFamily:"Nunito, sans-serif", marginRight:4 }}>
@@ -3223,7 +3225,18 @@ function TabConsumos({ data, setData }) {
                     <td style={{ padding:"9px 14px", color:"#888" }}>{c.sucursalNombre}</td>
                     <td style={{ padding:"9px 14px", textAlign:"right", color:"#555" }}>{resumen}</td>
                     <td style={{ padding:"9px 14px", textAlign:"right", fontWeight:900, color:"#7d3c98" }}>{fmt(c.total)}</td>
-                    <td style={{ padding:"9px 14px", textAlign:"right", color:"#aaa", fontSize:11 }}>{abierto ? "▲" : "▼"}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"right" }}>
+                      <button onClick={function(e){
+                        e.stopPropagation();
+                        if (window.confirm("¿Eliminar este consumo? Esta acción no se puede deshacer.")) {
+                          eliminarConsumo(c.id);
+                          setData(function(prev){ return { ...prev, consumosEmpleado: prev.consumosEmpleado.filter(function(x){ return x.id !== c.id; }) }; });
+                        }
+                      }} style={{ padding:"3px 10px", borderRadius:8, border:"2px solid #ffb3b3", background:"white", cursor:"pointer", fontSize:11, fontWeight:700, color:"#e74c3c", fontFamily:"Nunito, sans-serif" }}>
+                        Eliminar
+                      </button>
+                      <span style={{ marginLeft:8, color:"#aaa", fontSize:11 }}>{abierto ? "▲" : "▼"}</span>
+                    </td>
                   </tr>,
                   abierto && (
                     <tr key={c.id + "_det"}>
