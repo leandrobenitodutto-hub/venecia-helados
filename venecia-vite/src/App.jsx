@@ -2029,14 +2029,15 @@ function Dashboard({ data }) {
   );
   const ventasFiltradas = filtrarPorHora(ventasPorFecha, horaDesde, horaHasta);
 
-  const totalPeriodo   = ventasFiltradas.reduce((s,v) => s + v.total, 0);
+  const brutoPeriodo   = ventasFiltradas.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
+  const totalPeriodo   = brutoPeriodo;
   const costoPeriodo   = ventasFiltradas.reduce((s,v) => s + v.costo_total, 0);
-  const gananciaPeriodo = totalPeriodo - costoPeriodo;
-  const margenPeriodo  = totalPeriodo > 0 ? ((gananciaPeriodo/totalPeriodo)*100).toFixed(1) : 0;
+  const gananciaPeriodo = brutoPeriodo - costoPeriodo;
+  const margenPeriodo  = brutoPeriodo > 0 ? ((gananciaPeriodo/brutoPeriodo)*100).toFixed(1) : 0;
 
   const porSucursal = data.sucursales.map(s => {
     const vs = ventasFiltradas.filter(v => v.sucursal_id === s.id);
-    return { nombre: s.nombre, total: vs.reduce((a,v) => a+v.total, 0), cantidad: vs.length };
+    return { nombre: s.nombre, total: vs.reduce((a,v) => a + (v.items || []).reduce((x,i) => x + (i.subtotal || 0), 0), 0), cantidad: vs.length };
   });
   const ultimas = [...ventasFiltradas].sort((a,b) => b.id - a.id).slice(0, 8);
 
@@ -2044,11 +2045,11 @@ function Dashboard({ data }) {
   const ventasPorHora = Array.from({length:24}, (_,h) => {
     const label = String(h).padStart(2,"0") + ":00";
     const vs = ventasFiltradas.filter(v => v.hora && parseInt(v.hora.split(":")[0]) === h);
-    return { hora: label, total: vs.reduce((s,v) => s+v.total, 0), cantidad: vs.length };
+    return { hora: label, total: vs.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0), cantidad: vs.length };
   }).filter(h => h.total > 0 || ventasFiltradas.some(v => v.hora && parseInt(v.hora.split(":")[0]) === parseInt(h.hora)));
   const horasConVentas = Array.from({length:24}, (_,h) => {
     const vs = ventasFiltradas.filter(v => v.hora && parseInt(v.hora.split(":")[0]) === h);
-    return { hora: String(h).padStart(2,"0")+":00", total: vs.reduce((s,v)=>s+v.total,0), cantidad: vs.length };
+    return { hora: String(h).padStart(2,"0")+":00", total: vs.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0), cantidad: vs.length };
   });
   const maxHora = Math.max(...horasConVentas.map(h => h.total), 1);
 
