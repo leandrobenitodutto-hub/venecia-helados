@@ -8,6 +8,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── Helpers de base de datos ──────────────────────────────────────────────────
 
+async function cargarTodasLasVentas() {
+  const PAGINA = 1000;
+  let todas = [];
+  let desde = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('ventas')
+      .select('*')
+      .order('id')
+      .range(desde, desde + PAGINA - 1);
+    if (error || !data || data.length === 0) break;
+    todas = todas.concat(data);
+    if (data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return todas;
+}
+
 async function cargarDatos() {
   const [
     { data: sucursales },
@@ -15,18 +33,18 @@ async function cargarDatos() {
     { data: productos },
     { data: insumos },
     { data: cajas },
-    { data: ventas },
     { data: retiros },
     { data: consumosEmpleado },
+    ventas,
   ] = await Promise.all([
     supabase.from('sucursales').select('*').order('id'),
     supabase.from('usuarios').select('*').order('id'),
     supabase.from('productos').select('*').order('id'),
     supabase.from('insumos').select('*').order('id'),
     supabase.from('cajas').select('*').order('id'),
-    supabase.from('ventas').select('*').order('id'),
     supabase.from('retiros').select('*').order('id'),
     supabase.from('consumos_empleado').select('*').order('id'),
+    cargarTodasLasVentas(),
   ])
 
   return {
