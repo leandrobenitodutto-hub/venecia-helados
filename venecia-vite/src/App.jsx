@@ -3133,6 +3133,12 @@ function TabConsumos({ data, setData }) {
   const [desde, setDesde] = useState(mesStr + "-01");
   const [hasta, setHasta] = useState(hoyStr);
   const [empleadoFiltro, setEmpleadoFiltro] = useState("");
+  const [detalleId, setDetalleId] = useState(null);
+  const [consumoEditando, setConsumoEditando] = useState(null);
+  const [editConsumoNombre, setEditConsumoNombre] = useState("");
+  const [editConsumoUserId, setEditConsumoUserId] = useState(null);
+  const [editModo, setEditModo] = useState("lista");
+  const [busquedaNombre, setBusquedaNombre] = useState("");
 
   var empleados = data.usuarios.filter(function(u) { return u.rol === "empleada"; });
 
@@ -3150,13 +3156,6 @@ function TabConsumos({ data, setData }) {
   }).sort(function(a,b) { return b.id - a.id; });
 
   var totalFiltrado = consumosFiltrados.reduce(function(s,c) { return s + c.total; }, 0);
-
-  const [detalleId, setDetalleId] = useState(null);
-  const [consumoEditando, setConsumoEditando] = useState(null);
-  const [editConsumoNombre, setEditConsumoNombre] = useState("");
-  const [editConsumoUserId, setEditConsumoUserId] = useState(null);
-  const [editModo, setEditModo] = useState("lista"); // "lista" o "manual"
-  const [busquedaNombre, setBusquedaNombre] = useState("");
 
   var filtroStyle = { padding:"8px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, color:C.dark, outline:"none", background:C.blanco };
 
