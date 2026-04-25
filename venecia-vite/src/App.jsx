@@ -435,16 +435,16 @@ const hoy = () => {
 const ahora = () => new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hour12: false });
 const fechaLegible = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-// Filtra ventas por rango fecha+hora combinado "YYYY-MM-DD HH:MM"
+// Filtra ventas por rango DESDE fecha+hora HASTA fecha+hora (datetime continuo)
 const filtrarPorHora = (ventas, horaDesde, horaHasta, desde, hasta) => {
   if (!horaDesde && !horaHasta) return ventas;
-  const dt = v => (v.fecha || "0000-00-00") + " " + (v.hora || "00:00").slice(0,5);
-  const desdeDT = desde + " " + (horaDesde || "00:00");
-  const hastaDT = hasta + " " + (horaHasta || "23:59");
-  // Re-filtra sobre TODAS las ventas del rango de fechas ampliado
+  // Combina fecha+hora en un string comparable "YYYY-MM-DD HH:MM"
+  const toMin = (fecha, hora) => fecha + " " + (hora || "00:00").slice(0, 5);
+  const desdeDT = toMin(desde, horaDesde || "00:00");
+  const hastaDT = toMin(hasta, horaHasta || "23:59");
   return ventas.filter(v => {
-    if (v.fecha < desde || v.fecha > hasta) return false;
-    return dt(v) >= desdeDT && dt(v) <= hastaDT;
+    const vDT = toMin(v.fecha || "0000-00-00", v.hora || "00:00");
+    return vDT >= desdeDT && vDT <= hastaDT;
   });
 };
 
@@ -2025,15 +2025,10 @@ function Dashboard({ data }) {
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
   };
 
-  const ventasPorFecha = data.ventas.filter(v =>
-    v.fecha >= desde && v.fecha <= hasta &&
-    (!sucFiltro || v.sucursal_id === Number(sucFiltro))
-  );
+  const ventasSuc = data.ventas.filter(v => (!sucFiltro || v.sucursal_id === Number(sucFiltro)));
+  const ventasPorFecha = ventasSuc.filter(v => v.fecha >= desde && v.fecha <= hasta);
   const ventasFiltradas = horaDesde || horaHasta
-    ? filtrarPorHora(
-        data.ventas.filter(v => (!sucFiltro || v.sucursal_id === Number(sucFiltro))),
-        horaDesde, horaHasta, desde, hasta
-      )
+    ? filtrarPorHora(ventasSuc, horaDesde, horaHasta, desde, hasta)
     : ventasPorFecha;
 
   const brutoPeriodo   = ventasFiltradas.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
@@ -2252,14 +2247,10 @@ function TabVentas({ data }) {
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
   };
 
-  const ventasPorFecha = data.ventas.filter(v =>
-    v.fecha >= desde && v.fecha <= hasta && (!filtroSuc || v.sucursal_id === Number(filtroSuc))
-  );
+  const ventasSuc = data.ventas.filter(v => (!filtroSuc || v.sucursal_id === Number(filtroSuc)));
+  const ventasPorFecha = ventasSuc.filter(v => v.fecha >= desde && v.fecha <= hasta);
   const ventasFiltradas = (horaDesde || horaHasta
-    ? filtrarPorHora(
-        data.ventas.filter(v => (!filtroSuc || v.sucursal_id === Number(filtroSuc))),
-        horaDesde, horaHasta, desde, hasta
-      )
+    ? filtrarPorHora(ventasSuc, horaDesde, horaHasta, desde, hasta)
     : ventasPorFecha
   ).sort((a,b) => b.id - a.id);
   const totalFiltrado = ventasFiltradas.reduce((s, v) => s + v.total, 0);
@@ -2587,15 +2578,10 @@ function TabResultados({ data }) {
     else if (tipo === "todo") { setDesde(primerDia); setHasta(hoyStr); }
   };
 
-  const ventasPorFecha = data.ventas.filter(v =>
-    v.fecha >= desde && v.fecha <= hasta &&
-    (!sucFiltro || v.sucursal_id === Number(sucFiltro))
-  );
+  const ventasSuc = data.ventas.filter(v => (!sucFiltro || v.sucursal_id === Number(sucFiltro)));
+  const ventasPorFecha = ventasSuc.filter(v => v.fecha >= desde && v.fecha <= hasta);
   const ventasFiltradas = horaDesde || horaHasta
-    ? filtrarPorHora(
-        data.ventas.filter(v => (!sucFiltro || v.sucursal_id === Number(sucFiltro))),
-        horaDesde, horaHasta, desde, hasta
-      )
+    ? filtrarPorHora(ventasSuc, horaDesde, horaHasta, desde, hasta)
     : ventasPorFecha;
   const ingresos = ventasFiltradas.reduce((s, v) => s + v.total, 0);
   const costos = ventasFiltradas.reduce((s, v) => s + v.costo_total, 0);
