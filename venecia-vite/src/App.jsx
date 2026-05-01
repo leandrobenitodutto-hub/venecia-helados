@@ -1144,7 +1144,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   var retirosCaja = data.retiros.filter(function(r) { return r.cajaId === caja.id; });
   var totalRetiros = retirosCaja.reduce(function(s, r) { return s + r.monto; }, 0);
 
-  function guardarRetiro() {
+  function registrarRetiro() {
     if (!retiroMonto || !retiroMotivo) return;
     var nuevoRetiro = {
       id: Date.now(),
@@ -1770,7 +1770,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                 style={{ flex:1, padding:"11px", borderRadius:12, border:"2px solid " + C.violetaLight, background:C.blanco, cursor:"pointer", fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
                 Cancelar
               </button>
-              <button onClick={guardarRetiro}
+              <button onClick={registrarRetiro}
                 style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
                 Registrar retiro
               </button>
