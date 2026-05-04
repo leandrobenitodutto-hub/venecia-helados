@@ -3778,7 +3778,7 @@ function TabProductos({ data, setData }) {
         <>
           {/* Banner stock */}
           {(() => {
-            const sinStock = data.productos.filter(p => !p.activo);
+            const sinStock = data.productos.filter(p => p.activo && p.stockKg !== undefined && p.stockKg !== null && Number(p.stockKg) <= 0);
             return sinStock.length > 0 ? (
               <div style={{ background: "#ffe8e8", border: "1px solid #ffb3b3", borderRadius: 12, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 18 }}>⚠️</span>
@@ -3845,7 +3845,7 @@ function TabProductos({ data, setData }) {
                       <button
                         onClick={() => toggleActivo(p.id)}
                         style={{ padding: "7px 14px", borderRadius: 10, border: p.activo ? "2px solid #ffb3b3" : "2px solid #a8e6cf", background: C.blanco, cursor: "pointer", fontSize: 12, fontWeight: 800, color: p.activo ? "#e74c3c" : "#27ae60", fontFamily: "Nunito, sans-serif" }}>
-                        {p.activo ? "Sin stock" : "Activar"}
+                        {p.activo ? "Desactivar" : "Activar"}
                       </button>
                     </div>
                   </div>
