@@ -4241,7 +4241,26 @@ export default function App() {
     }
   };
 
-  const handleAbrirCaja = async function(montoInicial) {
+const handleAbrirCaja = async function(montoInicial) {
+    var yaExiste = data.cajas.find(function(c) {
+      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
+        && (c.usuario_id === sesion.usuario.id || c.usuarioId === sesion.usuario.id)
+        && (c.sucursal_id === sesion.sucursal.id || c.sucursalId === sesion.sucursal.id);
+    });
+    if (yaExiste) {
+      setCajaActiva({
+        id: yaExiste.id,
+        usuarioId: yaExiste.usuario_id || yaExiste.usuarioId,
+        usuarioNombre: yaExiste.usuario_nombre || yaExiste.usuarioNombre,
+        sucursalId: yaExiste.sucursal_id || yaExiste.sucursalId,
+        sucursalNombre: yaExiste.sucursal_nombre || yaExiste.sucursalNombre,
+        fecha: yaExiste.fecha,
+        horaApertura: yaExiste.hora_apertura || yaExiste.horaApertura,
+        montoInicial: yaExiste.monto_inicial || yaExiste.montoInicial || 0,
+        cerrada: false,
+      });
+      return;
+    }
     var nuevaCaja = {
       id: Date.now(),
       usuarioId: sesion.usuario.id,
