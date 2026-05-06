@@ -3527,16 +3527,14 @@ function TabConsumos({ data, setData }) {
   const [editModo, setEditModo] = useState("lista");
   const [busquedaNombre, setBusquedaNombre] = useState("");
 
-  var empleados = data.usuarios.filter(function(u) { return u.rol === "empleada"; });
+  var consumidores = (data.consumidores || []).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
 
   var consumosFiltrados = data.consumosEmpleado.filter(function(c) {
     if (c.fecha < desde || c.fecha > hasta) return false;
     if (empleadoFiltro) {
       var nombre = (c.usuarioNombre || c.usuario_nombre || "").toLowerCase();
-      var filtroNum = Number(empleadoFiltro);
-      var matchId = !isNaN(filtroNum) && c.usuarioId === filtroNum;
-      var matchNombre = nombre.includes(empleadoFiltro.toLowerCase());
-      if (!matchId && !matchNombre) return false;
+      var matchNombre = nombre === empleadoFiltro.toLowerCase();
+      if (!matchNombre) return false;
     }
     if (busquedaNombre && !(c.usuarioNombre || c.usuario_nombre || "").toLowerCase().includes(busquedaNombre.toLowerCase())) return false;
     return true;
@@ -3571,9 +3569,9 @@ function TabConsumos({ data, setData }) {
             <input type="date" value={hasta} onChange={function(e){setHasta(e.target.value);}} style={filtroStyle} />
           </div>
           <select value={empleadoFiltro} onChange={function(e){setEmpleadoFiltro(e.target.value);}} style={filtroStyle}>
-            <option value="">Todas las empleadas</option>
-            {empleados.map(function(u) {
-              return <option key={u.id} value={u.id}>{u.nombre}</option>;
+            <option value="">Todos los consumidores</option>
+            {consumidores.map(function(c) {
+              return <option key={c.id} value={c.nombre}>{c.nombre}</option>;
             })}
           </select>
           <input
@@ -3688,29 +3686,13 @@ function TabConsumos({ data, setData }) {
         <div style={{ background:"white", borderRadius:20, padding:"28px 24px", maxWidth:380, width:"100%", fontFamily:"Nunito, sans-serif", boxShadow:"0 24px 60px rgba(91,45,142,0.4)" }}>
           <h3 style={{ margin:"0 0 16px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>Editar consumo</h3>
           <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:6, textTransform:"uppercase" }}>Empleada que consumió</label>
-            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-              <button onClick={function(){ setEditModo("lista"); }}
-                style={{ flex:1, padding:"7px", borderRadius:10, border:"2px solid " + (editModo === "lista" ? C.violeta : C.violetaLight), background: editModo === "lista" ? C.violeta : "white", color: editModo === "lista" ? "white" : C.violeta, fontWeight:700, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif" }}>
-                Del listado
-              </button>
-              <button onClick={function(){ setEditModo("manual"); }}
-                style={{ flex:1, padding:"7px", borderRadius:10, border:"2px solid " + (editModo === "manual" ? C.violeta : C.violetaLight), background: editModo === "manual" ? C.violeta : "white", color: editModo === "manual" ? "white" : C.violeta, fontWeight:700, cursor:"pointer", fontSize:12, fontFamily:"Nunito, sans-serif" }}>
-                Escribir nombre
-              </button>
-            </div>
-            {editModo === "lista" ? (
-              <select value={editConsumoUserId || ""} onChange={function(e){ setEditConsumoUserId(Number(e.target.value)); }}
-                style={{ width:"100%", padding:"11px 14px", borderRadius:12, border:"2px solid " + C.violetaLight, fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:600, boxSizing:"border-box", outline:"none" }}>
-                <option value="">Seleccioná una empleada</option>
-                {empleados.map(function(u){ return <option key={u.id} value={u.id}>{u.nombre}</option>; })}
-              </select>
-            ) : (
-              <input type="text" value={editConsumoNombre}
-                onChange={function(e){ setEditConsumoNombre(e.target.value); }}
-                placeholder="Nombre de la empleada"
-                style={{ width:"100%", padding:"11px 14px", borderRadius:12, border:"2px solid " + C.violetaLight, fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:600, boxSizing:"border-box", outline:"none" }} />
-            )}
+            <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:6, textTransform:"uppercase" }}>Consumidor</label>
+            <select value={editConsumoNombre}
+              onChange={function(e){ setEditConsumoNombre(e.target.value); }}
+              style={{ width:"100%", padding:"11px 14px", borderRadius:12, border:"2px solid " + C.violetaLight, fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:600, boxSizing:"border-box", outline:"none" }}>
+              <option value="">— Seleccioná un consumidor —</option>
+              {consumidores.map(function(c){ return <option key={c.id} value={c.nombre}>{c.nombre}</option>; })}
+            </select>
           </div>
           <div style={{ marginBottom:16, background:C.violetaPale, borderRadius:12, padding:"10px 14px" }}>
             <div style={{ fontSize:12, color:C.violetaMed, fontWeight:700, marginBottom:6 }}>Productos</div>
@@ -3732,14 +3714,11 @@ function TabConsumos({ data, setData }) {
               Cancelar
             </button>
             <button onClick={function() {
-                var nombreFinal = editModo === "lista"
-                  ? (empleados.find(function(u){ return u.id === editConsumoUserId; }) || {}).nombre || editConsumoNombre
-                  : editConsumoNombre;
-                var userIdFinal = editModo === "lista" ? editConsumoUserId : null;
-                supabase.from('consumos_empleado').update({ usuario_nombre: nombreFinal, usuario_id: userIdFinal }).eq('id', consumoEditando.id);
+                if (!editConsumoNombre) return;
+                supabase.from('consumos_empleado').update({ usuario_nombre: editConsumoNombre, usuario_id: null }).eq('id', consumoEditando.id);
                 setData(function(prev) {
                   return { ...prev, consumosEmpleado: prev.consumosEmpleado.map(function(c) {
-                    return c.id === consumoEditando.id ? { ...c, usuarioNombre: nombreFinal, usuario_nombre: nombreFinal, usuarioId: userIdFinal } : c;
+                    return c.id === consumoEditando.id ? { ...c, usuarioNombre: editConsumoNombre, usuario_nombre: editConsumoNombre, usuarioId: null } : c;
                   })};
                 });
                 setConsumoEditando(null);
