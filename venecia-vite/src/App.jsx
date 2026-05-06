@@ -36,6 +36,7 @@ async function cargarDatos() {
     { data: retiros },
     { data: consumosEmpleado },
     { data: historialPrecios },
+    { data: consumidores },
     ventas,
   ] = await Promise.all([
     supabase.from('sucursales').select('*').order('id'),
@@ -46,12 +47,14 @@ async function cargarDatos() {
     supabase.from('retiros').select('*').order('id'),
     supabase.from('consumos_empleado').select('*').order('id'),
     supabase.from('historial_precios').select('*').order('id', { ascending: false }),
+    supabase.from('consumidores').select('*').order('nombre'),
     cargarTodasLasVentas(),
   ])
 
   return {
     sucursales: sucursales || [],
     usuarios: usuarios || [],
+    consumidores: consumidores || [],
     productos: (productos || []).map(p => ({
       ...p,
       stockKg: p.stock_kg,
@@ -439,6 +442,7 @@ const INITIAL_DATA = {
   cajas: [],
   retiros: [],
   consumosEmpleado: [],
+  consumidores: [],
   insumos: [
     { id: 1, nombre: "Helado (por kg)", costo: 8184 },
     { id: 2, nombre: "Pote telgopor chico", costo: 200 },
@@ -1073,10 +1077,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     };
     var nombreConsumo = String(empleadaConsumoId) === "otro"
       ? (empleadaConsumoNombre || "Sin nombre")
-      : empleadaConsumoId
-        ? (data.usuarios.find(function(u) { return u.id === Number(empleadaConsumoId); }) || sesion.usuario).nombre
+      : empleadaConsumoId && String(empleadaConsumoId).startsWith("consumidor_")
+        ? ((data.consumidores || []).find(function(c) { return c.id === Number(String(empleadaConsumoId).replace("consumidor_", "")); }) || {}).nombre || "Sin nombre"
         : sesion.usuario.nombre;
-    var idConsumo = String(empleadaConsumoId) === "otro" ? null : (empleadaConsumoId ? Number(empleadaConsumoId) : sesion.usuario.id);
+    var idConsumo = String(empleadaConsumoId) === "otro" ? null
+      : empleadaConsumoId && String(empleadaConsumoId).startsWith("consumidor_")
+        ? Number(String(empleadaConsumoId).replace("consumidor_", ""))
+        : null;
     var consumoObj = formaPago === "consumo" ? {
       id: nuevaVenta.id, fecha: nuevaVenta.fecha, hora: nuevaVenta.hora,
       usuarioId: idConsumo,
@@ -1498,14 +1505,15 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                         Quien consume:
                       </div>
                       <select
-                        value={empleadaConsumoId || sesion.usuario.id}
+                        value={empleadaConsumoId || ""}
                         onChange={function(e) { setEmpleadaConsumoId(e.target.value); }}
                         style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid #b3c8f0",
                           fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:700, color:"#2d5fa8",
                           background:"white", outline:"none", marginBottom:8 }}>
-                        {data.usuarios.filter(function(u) { return u.rol !== "admin"; }).map(function(u) {
+                        <option value="">— Seleccioná quién consume —</option>
+                        {(data.consumidores || []).filter(function(c) { return c.activo !== false; }).map(function(c) {
                           return (
-                            <option key={u.id} value={u.id}>{u.nombre}</option>
+                            <option key={c.id} value={"consumidor_" + c.id}>{c.nombre}</option>
                           );
                         })}
                         <option value="otro">Otro (escribir nombre)...</option>
@@ -1866,6 +1874,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "resultados", icon: "💰", label: "Resultados" },
     { key: "caja", icon: "🏪", label: "Caja" },
     { key: "consumos", icon: "👤", label: "Consumos" },
+    { key: "consumidores", icon: "🧑‍🤝‍🧑", label: "Consumidores" },
     { key: "retiros", icon: "💸", label: "Retiros" },
     { key: "productos", icon: "🍦", label: "Productos" },
     { key: "usuarios", icon: "👥", label: "Usuarios" },
@@ -1991,6 +2000,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "resultados" && <TabResultados data={data} />}
           {tab === "caja" && <TabCaja data={data} />}
           {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
+          {tab === "consumidores" && <TabConsumidores data={data} setData={setData} />}
           {tab === "retiros" && <TabRetiros data={data} setData={setData} />}
           {tab === "productos" && <TabProductos data={data} setData={setData} />}
           {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
@@ -3306,6 +3316,201 @@ function TabInsumos({ data, setData }) {
 }
 
 
+async function guardarConsumidor(consumidor) {
+  const data = { nombre: consumidor.nombre, activo: consumidor.activo !== false };
+  if (consumidor.id) {
+    await supabase.from('consumidores').update(data).eq('id', consumidor.id);
+  } else {
+    const { data: nuevo } = await supabase.from('consumidores').insert(data).select().single();
+    return nuevo;
+  }
+}
+
+async function eliminarConsumidor(id) {
+  await supabase.from('consumidores').delete().eq('id', id);
+}
+
+// ─── TAB CONSUMIDORES (ADMIN) ─────────────────────────────────────────────────
+function TabConsumidores({ data, setData }) {
+  const [editando, setEditando] = useState(null);
+  const [form, setForm] = useState({ nombre: "", activo: true });
+
+  const abrirForm = function(c) {
+    if (!c) {
+      setForm({ nombre: "", activo: true });
+      setEditando("nuevo");
+    } else {
+      setForm({ nombre: c.nombre, activo: c.activo !== false });
+      setEditando(c.id);
+    }
+  };
+
+  const guardar = function() {
+    if (!form.nombre.trim()) return;
+    if (editando === "nuevo") {
+      guardarConsumidor({ nombre: form.nombre.trim(), activo: form.activo }).then(function(nuevo) {
+        setData(function(prev) {
+          return { ...prev, consumidores: [...prev.consumidores, { id: nuevo ? nuevo.id : Date.now(), nombre: form.nombre.trim(), activo: form.activo }] };
+        });
+      });
+    } else {
+      guardarConsumidor({ id: editando, nombre: form.nombre.trim(), activo: form.activo });
+      setData(function(prev) {
+        return { ...prev, consumidores: prev.consumidores.map(function(c) {
+          return c.id === editando ? { ...c, nombre: form.nombre.trim(), activo: form.activo } : c;
+        }) };
+      });
+    }
+    setEditando(null);
+  };
+
+  const eliminar = function(id) {
+    if (window.confirm("¿Eliminar este consumidor?")) {
+      eliminarConsumidor(id);
+      setData(function(prev) { return { ...prev, consumidores: prev.consumidores.filter(function(c) { return c.id !== id; }) }; });
+    }
+  };
+
+  const toggleActivo = function(c) {
+    guardarConsumidor({ id: c.id, nombre: c.nombre, activo: !c.activo });
+    setData(function(prev) {
+      return { ...prev, consumidores: prev.consumidores.map(function(x) {
+        return x.id === c.id ? { ...x, activo: !x.activo } : x;
+      }) };
+    });
+  };
+
+  var inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 12, border: "2px solid " + C.violetaLight, fontSize: 14, fontFamily: "Nunito, sans-serif", fontWeight: 600, boxSizing: "border-box", outline: "none" };
+
+  var activos = (data.consumidores || []).filter(function(c) { return c.activo !== false; });
+  var inactivos = (data.consumidores || []).filter(function(c) { return c.activo === false; });
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <SectionTitle>Consumidores habilitados</SectionTitle>
+        <button onClick={function(){ abrirForm(null); }}
+          style={{ padding:"10px 20px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontSize:14, fontFamily:"Nunito, sans-serif", boxShadow:"0 4px 14px rgba(91,45,142,0.35)" }}>
+          + Nuevo consumidor
+        </button>
+      </div>
+
+      <div style={{ background:"#e8f0fe", borderRadius:14, padding:"12px 18px", marginBottom:16, fontSize:13, color:"#2d5fa8", fontWeight:600 }}>
+        👤 Estas personas aparecen en el selector de "Consumo empleado" en el POS. Solo se muestran las <strong>activas</strong>.
+      </div>
+
+      {(data.consumidores || []).length === 0 ? (
+        <Card style={{ textAlign:"center", padding:48 }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>🧑‍🤝‍🧑</div>
+          <p style={{ color:C.violetaLight, fontWeight:700 }}>No hay consumidores cargados aún</p>
+          <p style={{ color:"#aaa", fontSize:13 }}>Agregá las personas que pueden registrar consumos</p>
+        </Card>
+      ) : (
+        <Card style={{ padding:0, overflow:"hidden", marginBottom:16 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:C.violetaPale }}>
+                {["Nombre", "Estado", "Acciones"].map(function(h, i) {
+                  return <th key={i} style={{ padding:"12px 16px", textAlign: i === 2 ? "right" : "left", color:C.violeta, fontWeight:800, fontSize:11, textTransform:"uppercase" }}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {(data.consumidores || []).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(c, i) {
+                return (
+                  <tr key={c.id} style={{ borderTop:"1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                    <td style={{ padding:"12px 16px", fontWeight:800, color: c.activo !== false ? C.dark : "#aaa" }}>
+                      <span style={{ marginRight:8 }}>{c.activo !== false ? "✅" : "⏸️"}</span>{c.nombre}
+                    </td>
+                    <td style={{ padding:"12px 16px" }}>
+                      <button onClick={function(){ toggleActivo(c); }}
+                        style={{ padding:"4px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:800, fontFamily:"Nunito, sans-serif",
+                          background: c.activo !== false ? C.mentaPale : "#f5f5f5",
+                          color: c.activo !== false ? "#2a7a5e" : "#aaa" }}>
+                        {c.activo !== false ? "Activo" : "Inactivo"}
+                      </button>
+                    </td>
+                    <td style={{ padding:"12px 16px", textAlign:"right" }}>
+                      <button onClick={function(){ abrirForm(c); }}
+                        style={{ padding:"5px 12px", borderRadius:8, border:"2px solid " + C.violetaLight, background:C.blanco, cursor:"pointer", fontSize:11, fontWeight:700, color:C.violeta, fontFamily:"Nunito, sans-serif", marginRight:6 }}>
+                        Editar
+                      </button>
+                      <button onClick={function(){ eliminar(c.id); }}
+                        style={{ padding:"5px 12px", borderRadius:8, border:"2px solid #ffb3b3", background:C.blanco, color:"#e74c3c", cursor:"pointer", fontSize:11, fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+        <Card style={{ flex:1, minWidth:140, borderLeft:"4px solid #27ae60", padding:"12px 16px" }}>
+          <div style={{ fontSize:11, color:"#aaa", fontWeight:700, marginBottom:4 }}>ACTIVOS</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#27ae60" }}>{activos.length}</div>
+        </Card>
+        <Card style={{ flex:1, minWidth:140, borderLeft:"4px solid #aaa", padding:"12px 16px" }}>
+          <div style={{ fontSize:11, color:"#aaa", fontWeight:700, marginBottom:4 }}>INACTIVOS</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#aaa" }}>{inactivos.length}</div>
+        </Card>
+        <Card style={{ flex:1, minWidth:140, borderLeft:"4px solid " + C.violeta, padding:"12px 16px" }}>
+          <div style={{ fontSize:11, color:"#aaa", fontWeight:700, marginBottom:4 }}>TOTAL</div>
+          <div style={{ fontSize:24, fontWeight:900, color:C.violeta }}>{(data.consumidores || []).length}</div>
+        </Card>
+      </div>
+
+      {editando && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(45,21,89,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
+          <Card style={{ maxWidth:360, width:"100%" }}>
+            <h3 style={{ margin:"0 0 20px", color:C.violeta, fontFamily:"Baloo 2, cursive" }}>
+              {editando === "nuevo" ? "Nuevo consumidor" : "Editar consumidor"}
+            </h3>
+            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              <div>
+                <label style={{ fontSize:12, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>Nombre completo</label>
+                <input type="text" value={form.nombre}
+                  onChange={function(e){ setForm(function(f){ return { ...f, nombre: e.target.value }; }); }}
+                  placeholder="Ej: Juan García"
+                  style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:C.violeta, fontWeight:800, display:"block", marginBottom:8, textTransform:"uppercase" }}>Estado</label>
+                <div style={{ display:"flex", gap:8 }}>
+                  {[{ val: true, label:"✅ Activo" }, { val: false, label:"⏸️ Inactivo" }].map(function(op) {
+                    return (
+                      <button key={String(op.val)} onClick={function(){ setForm(function(f){ return { ...f, activo: op.val }; }); }}
+                        style={{ flex:1, padding:"9px", borderRadius:10, cursor:"pointer", fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:700,
+                          border: form.activo === op.val ? "2px solid " + C.violeta : "2px solid " + C.violetaLight,
+                          background: form.activo === op.val ? C.violetaPale : C.blanco,
+                          color: form.activo === op.val ? C.violeta : "#888" }}>
+                        {op.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, marginTop:20 }}>
+              <button onClick={function(){ setEditando(null); }}
+                style={{ flex:1, padding:"11px", borderRadius:12, border:"2px solid " + C.violetaLight, background:C.blanco, cursor:"pointer", fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
+                Cancelar
+              </button>
+              <button onClick={guardar}
+                style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", boxShadow:"0 4px 14px rgba(91,45,142,0.35)" }}>
+                Guardar
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TAB CONSUMOS EMPLEADO (ADMIN) ───────────────────────────────────────────
 function TabConsumos({ data, setData }) {
   var hoyStr = hoy();
@@ -3339,11 +3544,17 @@ function TabConsumos({ data, setData }) {
 
   var filtroStyle = { padding:"8px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, color:C.dark, outline:"none", background:C.blanco };
 
-  // Agrupar por empleado para resumen
-  var resumenPorEmpleado = empleados.map(function(u) {
-    var cs = consumosFiltrados.filter(function(c) { return c.usuarioId === u.id; });
-    return { nombre: u.nombre, cantidad: cs.length, total: cs.reduce(function(s,c){return s+c.total;},0) };
-  }).filter(function(e) { return e.cantidad > 0; });
+  // Agrupar por nombre de consumidor para resumen (incluye nombres libres)
+  var resumenPorEmpleado = (function() {
+    var mapa = {};
+    consumosFiltrados.forEach(function(c) {
+      var nombre = c.usuarioNombre || c.usuario_nombre || "Sin nombre";
+      if (!mapa[nombre]) mapa[nombre] = { nombre: nombre, cantidad: 0, total: 0 };
+      mapa[nombre].cantidad += 1;
+      mapa[nombre].total += c.total;
+    });
+    return Object.values(mapa).sort(function(a, b) { return b.total - a.total; });
+  })();
 
   return (
     <div>
