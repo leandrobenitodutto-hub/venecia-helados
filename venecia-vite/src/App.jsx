@@ -1516,19 +1516,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                             <option key={c.id} value={"consumidor_" + c.id}>{c.nombre}</option>
                           );
                         })}
-                        <option value="otro">Otro (escribir nombre)...</option>
                       </select>
-                      {String(empleadaConsumoId) === "otro" && (
-                        <input
-                          type="text"
-                          placeholder="Nombre de quien consume"
-                          value={empleadaConsumoNombre || ""}
-                          onChange={function(e) { setEmpleadaConsumoNombre(e.target.value); }}
-                          style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid #b3c8f0",
-                            fontSize:14, fontFamily:"Nunito, sans-serif", fontWeight:700, color:"#2d5fa8",
-                            outline:"none", marginBottom:8, boxSizing:"border-box" }}
-                        />
-                      )}
                       <div style={{ fontSize:11, color:"#888" }}>
                         Registrado por: {sesion.usuario.nombre}. No descuenta de caja.
                       </div>
@@ -2531,6 +2519,20 @@ function TabVentas({ data }) {
         <div style={{ position: "fixed", inset: 0, background: "rgba(45,21,89,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
           <Card style={{ maxWidth: 440, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
             <h3 style={{ margin: "0 0 16px", color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Detalle venta #{String(ventaDetalle.id).slice(-5)}</h3>
+            {/* Info consumidor si es consumo empleado */}
+            {ventaDetalle.formaPago === "consumo" && (function() {
+              var consumo = data.consumosEmpleado.find(function(c) { return c.id === ventaDetalle.id; });
+              return (
+                <div style={{ background:"#e8f0fe", borderRadius:12, padding:"10px 14px", marginBottom:14, display:"flex", gap:12, alignItems:"center" }}>
+                  <span style={{ fontSize:22 }}>👤</span>
+                  <div>
+                    <div style={{ fontSize:11, color:"#2d5fa8", fontWeight:800, textTransform:"uppercase", letterSpacing:0.5 }}>Consumidor</div>
+                    <div style={{ fontSize:15, fontWeight:900, color:"#1a3a6b" }}>{consumo ? (consumo.usuarioNombre || consumo.usuario_nombre) : "—"}</div>
+                    <div style={{ fontSize:11, color:"#888" }}>Registrado por: {ventaDetalle.usuario_nombre}</div>
+                  </div>
+                </div>
+              );
+            })()}
             <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", marginBottom: 12 }}>
               <thead><tr style={{ background: C.violetaPale }}>
                 {["Producto", "Cant", "Precio", "Costo", "Subtotal"].map((h, i) => (
