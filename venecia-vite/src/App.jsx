@@ -2877,6 +2877,73 @@ function TabResultados({ data }) {
         </Card>
       </div>
 
+      {/* Tarjeta total kg vendidos */}
+      {totalKgVendidos > 0 && (
+        <Card style={{ marginBottom:16, padding:"20px 24px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:20, flexWrap:"wrap" }}>
+            <div style={{ fontSize:36 }}>⚖️</div>
+            <div>
+              <div style={{ fontSize:11, color:C.violetaMed, fontWeight:700, textTransform:"uppercase", marginBottom:4 }}>Total kg vendidos en el período</div>
+              <div style={{ fontSize:38, fontWeight:900, color:C.violeta, fontFamily:"Baloo 2, cursive", lineHeight:1 }}>
+                {totalKgVendidos.toFixed(2)} kg
+              </div>
+              <div style={{ fontSize:12, color:"#aaa", fontWeight:600, marginTop:4 }}>
+                Comparar con kg comprados en el período para detectar diferencias de stock
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Desglose por producto */}
+      {tablaProductos.length > 0 && (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", background: C.violetaPale }}>
+            <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Desglose por producto</h4>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
+            <thead>
+              <tr style={{ background: C.crema }}>
+                {["Producto", "Cant.", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
+                  <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tablaProductos.map((p, i) => {
+                const gan = p.ingresos - p.costos;
+                const marg = p.ingresos > 0 ? ((gan / p.ingresos) * 100).toFixed(0) : 0;
+                return (
+                  <tr key={i} style={{ borderTop: `1px solid ${C.violetaPale}`, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 800, color: C.dark }}>{p.nombre}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>{p.cantidad}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#2980b9", fontWeight: 800 }}>{fmt(p.ingresos)}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#e74c3c", fontWeight: 700 }}>{fmt(p.costos)}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#27ae60", fontWeight: 900 }}>{fmt(gan)}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                      <span style={{
+                        background: Number(marg) >= 50 ? C.mentaPale : C.amarilloLight,
+                        color: Number(marg) >= 50 ? "#2a7a5e" : "#8a6500",
+                        padding: "3px 10px", borderRadius: 10, fontWeight: 800, fontSize: 12,
+                      }}>{marg}%</span>
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr style={{ background: C.violetaPale, fontWeight:900 }}>
+                <td style={{ padding:"10px 14px", color:C.violeta }}>TOTAL</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{tablaProductos.reduce((s,p)=>s+p.cantidad,0)}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#7d3c98" }}>{totalKgVendidos >= 1 ? totalKgVendidos.toFixed(2) + " kg" : (totalKgVendidos*1000).toFixed(0) + " g"}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#2980b9" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos,0))}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#e74c3c" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.costos,0))}</td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:"#27ae60" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos-p.costos,0))}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </Card>
+      )}
+
       {/* ── PUNTO DE EQUILIBRIO ────────────────────────────────────────────── */}
       <PuntoDeEquilibrio data={data} />
 
@@ -3129,74 +3196,6 @@ function PuntoDeEquilibrio({ data }) {
               <text x={PL + chartW/2} y={H} textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="Nunito, sans-serif">días del mes</text>
             </svg>
           </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-      {totalKgVendidos > 0 && (
-        <Card style={{ marginBottom:16, padding:"20px 24px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:20, flexWrap:"wrap" }}>
-            <div style={{ fontSize:36 }}>⚖️</div>
-            <div>
-              <div style={{ fontSize:11, color:C.violetaMed, fontWeight:700, textTransform:"uppercase", marginBottom:4 }}>Total kg vendidos en el período</div>
-              <div style={{ fontSize:38, fontWeight:900, color:C.violeta, fontFamily:"Baloo 2, cursive", lineHeight:1 }}>
-                {totalKgVendidos.toFixed(2)} kg
-              </div>
-              <div style={{ fontSize:12, color:"#aaa", fontWeight:600, marginTop:4 }}>
-                Comparar con kg comprados en el período para detectar diferencias de stock
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Desglose por producto */}
-      {tablaProductos.length > 0 && (
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", background: C.violetaPale }}>
-            <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Desglose por producto</h4>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
-            <thead>
-              <tr style={{ background: C.crema }}>
-                {["Producto", "Cant.", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
-                  <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tablaProductos.map((p, i) => {
-                const gan = p.ingresos - p.costos;
-                const marg = p.ingresos > 0 ? ((gan / p.ingresos) * 100).toFixed(0) : 0;
-                return (
-                  <tr key={i} style={{ borderTop: `1px solid ${C.violetaPale}`, background: i % 2 === 0 ? C.blanco : C.crema }}>
-                    <td style={{ padding: "10px 14px", fontWeight: 800, color: C.dark }}>{p.nombre}</td>
-                    <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>{p.cantidad}</td>
-                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#2980b9", fontWeight: 800 }}>{fmt(p.ingresos)}</td>
-                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#e74c3c", fontWeight: 700 }}>{fmt(p.costos)}</td>
-                    <td style={{ padding: "10px 14px", textAlign: "right", color: "#27ae60", fontWeight: 900 }}>{fmt(gan)}</td>
-                    <td style={{ padding: "10px 14px", textAlign: "right" }}>
-                      <span style={{
-                        background: Number(marg) >= 50 ? C.mentaPale : C.amarilloLight,
-                        color: Number(marg) >= 50 ? "#2a7a5e" : "#8a6500",
-                        padding: "3px 10px", borderRadius: 10, fontWeight: 800, fontSize: 12,
-                      }}>{marg}%</span>
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr style={{ background: C.violetaPale, fontWeight:900 }}>
-                <td style={{ padding:"10px 14px", color:C.violeta }}>TOTAL</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{tablaProductos.reduce((s,p)=>s+p.cantidad,0)}</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:"#7d3c98" }}>{totalKgVendidos >= 1 ? totalKgVendidos.toFixed(2) + " kg" : (totalKgVendidos*1000).toFixed(0) + " g"}</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:"#2980b9" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos,0))}</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:"#e74c3c" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.costos,0))}</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:"#27ae60" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos-p.costos,0))}</td>
-                <td></td>
-              </tr>
-            </tbody>
-          </table>
         </Card>
       )}
     </div>
