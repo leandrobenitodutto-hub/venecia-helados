@@ -2957,93 +2957,19 @@ function PuntoDeEquilibrio({ data }) {
   var inputStyle = { padding: "9px 12px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none", boxSizing: "border-box" };
 
   // ── Gráfico SVG acumulado ─────────────────────────────────────────────────
-  var SVGChart = (function() {
-    var W = 520, H = 180, PL = 56, PR = 16, PT = 16, PB = 32;
-    var chartW = W - PL - PR, chartH = H - PT - PB;
-    var maxVal = Math.max(pe * 1.15, ventasMesTotal * 1.1, 1);
-    var xScale = function(d) { return PL + ((d - 1) / Math.max(diaActual - 1, 1)) * chartW; };
-    var yScale = function(v) { return PT + chartH - (v / maxVal) * chartH; };
-
-    // Línea de ventas acumuladas
-    var puntosVentas = diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }).join(" ");
-
-    // Línea PE horizontal
-    var yPE = pe > 0 ? yScale(pe) : -1;
-
-    // Línea proyección punteada hasta fin de mes
-    var proyFin = diaActual > 0 ? (ventasMesTotal / diaActual) * diasEnMes : 0;
-    var x1Proy = diaActual > 1 ? xScale(diaActual) : PL;
-    var y1Proy = diasMes.length > 0 ? yScale(diasMes[diasMes.length - 1].acum) : PT + chartH;
-    var x2Proy = PL + chartW;
-    var y2Proy = yScale(proyFin);
-
-    // Ticks eje Y
-    var ticks = [0, 0.25, 0.5, 0.75, 1].map(function(t) { return Math.round(maxVal * t); });
-
-    return (
-      <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
-        {/* Fondo */}
-        <rect x={PL} y={PT} width={chartW} height={chartH} fill={C.crema} rx="6" />
-
-        {/* Ticks Y */}
-        {ticks.map(function(t) {
-          var y = yScale(t);
-          return (
-            <g key={t}>
-              <line x1={PL} y1={y} x2={PL + chartW} y2={y} stroke={C.violetaLight} strokeWidth="0.8" strokeDasharray="3,3" />
-              <text x={PL - 4} y={y + 4} textAnchor="end" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">
-                {"$" + (t >= 1000 ? Math.round(t/1000) + "k" : t)}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Línea PE */}
-        {pe > 0 && yPE > PT && yPE < PT + chartH && (
-          <g>
-            <line x1={PL} y1={yPE} x2={PL + chartW} y2={yPE} stroke="#e74c3c" strokeWidth="2" strokeDasharray="6,3" />
-            <text x={PL + chartW - 2} y={yPE - 5} textAnchor="end" fontSize="9" fill="#e74c3c" fontWeight="700" fontFamily="Nunito, sans-serif">
-              PE ${Math.round(pe / 1000)}k
-            </text>
-          </g>
-        )}
-
-        {/* Proyección punteada */}
-        {diaActual < diasEnMes && diaActual > 0 && diasMes.length > 0 && (
-          <line x1={x1Proy} y1={y1Proy} x2={x2Proy} y2={y2Proy}
-            stroke={colorProgreso} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.5" />
-        )}
-
-        {/* Área bajo la curva de ventas */}
-        {diasMes.length > 1 && (
-          <polygon
-            points={[PL + "," + (PT + chartH), ...diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }), xScale(diasMes[diasMes.length-1].dia) + "," + (PT + chartH)].join(" ")}
-            fill={colorProgreso} opacity="0.12" />
-        )}
-
-        {/* Línea ventas acumuladas */}
-        {diasMes.length > 1 && (
-          <polyline points={puntosVentas} fill="none" stroke={colorProgreso} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-        )}
-
-        {/* Punto actual */}
-        {diasMes.length > 0 && (
-          <circle cx={xScale(diasMes[diasMes.length-1].dia)} cy={yScale(diasMes[diasMes.length-1].acum)}
-            r="5" fill={colorProgreso} stroke="white" strokeWidth="2" />
-        )}
-
-        {/* Eje X — días */}
-        {[1, Math.round(diasEnMes/4), Math.round(diasEnMes/2), Math.round(diasEnMes*3/4), diasEnMes].map(function(d) {
-          return (
-            <text key={d} x={PL + ((d-1)/(diasEnMes-1)) * chartW} y={H - 6} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">
-              {d}
-            </text>
-          );
-        })}
-        <text x={PL + chartW/2} y={H} textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="Nunito, sans-serif">días del mes</text>
-      </svg>
-    );
-  })();
+  var W = 520, H = 180, PL = 56, PR = 16, PT = 16, PB = 32;
+  var chartW = W - PL - PR, chartH = H - PT - PB;
+  var maxVal = Math.max(pe * 1.15, ventasMesTotal * 1.1, 1);
+  var xScale = function(d) { return PL + ((d - 1) / Math.max(diaActual - 1, 1)) * chartW; };
+  var yScale = function(v) { return PT + chartH - (v / maxVal) * chartH; };
+  var puntosVentas = diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }).join(" ");
+  var yPE = pe > 0 ? yScale(pe) : -1;
+  var proyFin = diaActual > 0 ? (ventasMesTotal / diaActual) * diasEnMes : 0;
+  var x1Proy = diaActual > 1 ? xScale(diaActual) : PL;
+  var y1Proy = diasMes.length > 0 ? yScale(diasMes[diasMes.length - 1].acum) : PT + chartH;
+  var x2Proy = PL + chartW;
+  var y2Proy = yScale(proyFin);
+  var ticks = [0, 0.25, 0.5, 0.75, 1].map(function(t) { return Math.round(maxVal * t); });
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -3160,7 +3086,48 @@ function PuntoDeEquilibrio({ data }) {
               <span><span style={{ color: "#e74c3c", fontWeight: 800 }}>- -</span> Punto de equilibrio</span>
               <span><span style={{ color: colorProgreso, fontWeight: 800, opacity: 0.5 }}>····</span> Proyección</span>
             </div>
-            {SVGChart}
+            <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
+              <rect x={PL} y={PT} width={chartW} height={chartH} fill={C.crema} rx="6" />
+              {ticks.map(function(t) {
+                var y = yScale(t);
+                return (
+                  <g key={t}>
+                    <line x1={PL} y1={y} x2={PL + chartW} y2={y} stroke={C.violetaLight} strokeWidth="0.8" strokeDasharray="3,3" />
+                    <text x={PL - 4} y={y + 4} textAnchor="end" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">
+                      {"$" + (t >= 1000 ? Math.round(t/1000) + "k" : t)}
+                    </text>
+                  </g>
+                );
+              })}
+              {pe > 0 && yPE > PT && yPE < PT + chartH && (
+                <g>
+                  <line x1={PL} y1={yPE} x2={PL + chartW} y2={yPE} stroke="#e74c3c" strokeWidth="2" strokeDasharray="6,3" />
+                  <text x={PL + chartW - 2} y={yPE - 5} textAnchor="end" fontSize="9" fill="#e74c3c" fontWeight="700" fontFamily="Nunito, sans-serif">
+                    {"PE $" + Math.round(pe / 1000) + "k"}
+                  </text>
+                </g>
+              )}
+              {diaActual < diasEnMes && diaActual > 0 && diasMes.length > 0 && (
+                <line x1={x1Proy} y1={y1Proy} x2={x2Proy} y2={y2Proy} stroke={colorProgreso} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.5" />
+              )}
+              {diasMes.length > 1 && (
+                <polygon
+                  points={[PL + "," + (PT + chartH), ...diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }), xScale(diasMes[diasMes.length-1].dia) + "," + (PT + chartH)].join(" ")}
+                  fill={colorProgreso} opacity="0.12" />
+              )}
+              {diasMes.length > 1 && (
+                <polyline points={puntosVentas} fill="none" stroke={colorProgreso} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              )}
+              {diasMes.length > 0 && (
+                <circle cx={xScale(diasMes[diasMes.length-1].dia)} cy={yScale(diasMes[diasMes.length-1].acum)} r="5" fill={colorProgreso} stroke="white" strokeWidth="2" />
+              )}
+              {[1, Math.round(diasEnMes/4), Math.round(diasEnMes/2), Math.round(diasEnMes*3/4), diasEnMes].map(function(d) {
+                return (
+                  <text key={d} x={PL + ((d-1)/Math.max(diasEnMes-1,1)) * chartW} y={H - 6} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">{d}</text>
+                );
+              })}
+              <text x={PL + chartW/2} y={H} textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="Nunito, sans-serif">días del mes</text>
+            </svg>
           </div>
         </Card>
       )}
