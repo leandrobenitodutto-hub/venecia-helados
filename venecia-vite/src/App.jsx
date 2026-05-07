@@ -2953,78 +2953,8 @@ function TabResultados({ data }) {
 
 
 // ─── PUNTO DE EQUILIBRIO ─────────────────────────────────────────────────────
-function PuntoDeEquilibrio({ data }) {
-  // Costos fijos guardados en localStorage
-  var getCosfijos = function() {
-    try { return Number(localStorage.getItem("venecia_costos_fijos_total") || "0"); } catch(e) { return 0; }
-  };
-  var saveCosfijos = function(val) {
-    try { localStorage.setItem("venecia_costos_fijos_total", String(val)); } catch(e) {}
-  };
-
-  const [totalCostosFijos, setTotalCostosFijos] = useState(getCosfijos);
-  const [inputCF, setInputCF] = useState(function() { return getCosfijos() > 0 ? String(getCosfijos()) : ""; });
-
-  // ── Cálculos ──────────────────────────────────────────────────────────────
-  // Margen de los últimos 30 días
-  var hace30 = (function() {
-    var d = new Date(); d.setDate(d.getDate() - 30);
-    return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-  })();
-  var hoyStr = hoy();
-  var mesStr = hoyStr.slice(0, 7);
-  var mesDesde = mesStr + "-01";
-
-  var ventasUlt30 = data.ventas.filter(function(v) { return v.fecha >= hace30 && v.fecha <= hoyStr; });
-  var ingresosUlt30 = ventasUlt30.reduce(function(s, v) { return s + v.total; }, 0);
-  var costosUlt30 = ventasUlt30.reduce(function(s, v) { return s + (v.costo_total || 0); }, 0);
-  var gananciaUlt30 = ingresosUlt30 - costosUlt30;
-  var margenUlt30 = ingresosUlt30 > 0 ? gananciaUlt30 / ingresosUlt30 : 0;
-
-  // Ventas del mes actual acumuladas por día
-  var ventasMes = data.ventas.filter(function(v) { return v.fecha >= mesDesde && v.fecha <= hoyStr; });
-  var ventasMesTotal = ventasMes.reduce(function(s, v) { return s + v.total; }, 0);
-
-  // Punto de equilibrio = costos fijos / margen
-  var pe = margenUlt30 > 0 && totalCostosFijos > 0 ? totalCostosFijos / margenUlt30 : 0;
-
-  // Progreso
-  var progreso = pe > 0 ? Math.min(ventasMesTotal / pe, 1) : 0;
-  var falta = Math.max(pe - ventasMesTotal, 0);
-  var superavit = ventasMesTotal > pe && pe > 0 ? ventasMesTotal - pe : 0;
-
-  // Días del mes
-  var diasEnMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-  var diaActual = new Date().getDate();
-  var proyeccion = diaActual > 0 ? (ventasMesTotal / diaActual) * diasEnMes : 0;
-
-  // Ventas acumuladas por día para el gráfico
-  var diasMes = (function() {
-    var dias = [];
-    var acum = 0;
-    for (var d = 1; d <= diaActual; d++) {
-      var fechaStr = mesStr + "-" + String(d).padStart(2, "0");
-      var totalDia = data.ventas.filter(function(v) { return v.fecha === fechaStr; }).reduce(function(s, v) { return s + v.total; }, 0);
-      acum += totalDia;
-      dias.push({ dia: d, acum: acum });
-    }
-    return dias;
-  })();
-
-  // Colores según estado
-  var colorProgreso = progreso >= 1 ? "#27ae60" : progreso >= 0.7 ? "#e67e22" : "#e74c3c";
-  var bgProgreso = progreso >= 1 ? "#e8f8f1" : progreso >= 0.7 ? "#fff3e0" : "#fdecea";
-
-  // Handlers costos fijos
-  var guardarCF = function(val) {
-    var n = Number(val);
-    if (!isNaN(n) && n >= 0) { setTotalCostosFijos(n); saveCosfijos(n); }
-  };
-
-  var inputStyle = { padding: "9px 12px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none", boxSizing: "border-box" };
-
-  // ── Gráfico SVG acumulado ─────────────────────────────────────────────────
-  var W = 520, H = 180, PL = 56, PR = 16, PT = 16, PB = 32;
+function PEChart({ pe, ventasMesTotal, diasMes, diaActual, diasEnMes, colorProgreso }) {
+  var W = 400, H = 150, PL = 46, PR = 12, PT = 12, PB = 28;
   var chartW = W - PL - PR, chartH = H - PT - PB;
   var maxVal = Math.max(pe * 1.15, ventasMesTotal * 1.1, 1);
   var xScale = function(d) { return PL + ((d - 1) / Math.max(diaActual - 1, 1)) * chartW; };
@@ -3036,168 +2966,254 @@ function PuntoDeEquilibrio({ data }) {
   var y1Proy = diasMes.length > 0 ? yScale(diasMes[diasMes.length - 1].acum) : PT + chartH;
   var x2Proy = PL + chartW;
   var y2Proy = yScale(proyFin);
-  var ticks = [0, 0.25, 0.5, 0.75, 1].map(function(t) { return Math.round(maxVal * t); });
+  var ticks = [0, 0.5, 1].map(function(t) { return Math.round(maxVal * t); });
+  return (
+    <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
+      <rect x={PL} y={PT} width={chartW} height={chartH} fill={C.crema} rx="4" />
+      {ticks.map(function(t) {
+        var y = yScale(t);
+        return (
+          <g key={t}>
+            <line x1={PL} y1={y} x2={PL + chartW} y2={y} stroke={C.violetaLight} strokeWidth="0.7" strokeDasharray="3,3" />
+            <text x={PL - 3} y={y + 3} textAnchor="end" fontSize="8" fill="#bbb" fontFamily="Nunito, sans-serif">
+              {"$" + (t >= 1000 ? Math.round(t/1000) + "k" : t)}
+            </text>
+          </g>
+        );
+      })}
+      {pe > 0 && yPE > PT && yPE < PT + chartH && (
+        <g>
+          <line x1={PL} y1={yPE} x2={PL + chartW} y2={yPE} stroke="#e74c3c" strokeWidth="1.5" strokeDasharray="5,3" />
+          <text x={PL + chartW - 2} y={yPE - 4} textAnchor="end" fontSize="8" fill="#e74c3c" fontWeight="700" fontFamily="Nunito, sans-serif">
+            {"PE $" + Math.round(pe / 1000) + "k"}
+          </text>
+        </g>
+      )}
+      {diaActual < diasEnMes && diaActual > 0 && diasMes.length > 0 && (
+        <line x1={x1Proy} y1={y1Proy} x2={x2Proy} y2={y2Proy} stroke={colorProgreso} strokeWidth="1.2" strokeDasharray="3,3" opacity="0.45" />
+      )}
+      {diasMes.length > 1 && (
+        <polygon
+          points={[PL + "," + (PT + chartH), ...diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }), xScale(diasMes[diasMes.length-1].dia) + "," + (PT + chartH)].join(" ")}
+          fill={colorProgreso} opacity="0.12" />
+      )}
+      {diasMes.length > 1 && (
+        <polyline points={puntosVentas} fill="none" stroke={colorProgreso} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      )}
+      {diasMes.length > 0 && (
+        <circle cx={xScale(diasMes[diasMes.length-1].dia)} cy={yScale(diasMes[diasMes.length-1].acum)} r="4" fill={colorProgreso} stroke="white" strokeWidth="1.5" />
+      )}
+      {[1, Math.round(diasEnMes/2), diasEnMes].map(function(d) {
+        return (
+          <text key={d} x={PL + ((d-1)/Math.max(diasEnMes-1,1)) * chartW} y={H - 4} textAnchor="middle" fontSize="8" fill="#ccc" fontFamily="Nunito, sans-serif">{d}</text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function PuntoDeEquilibrio({ data }) {
+  var hoyStr = hoy();
+  var mesStr = hoyStr.slice(0, 7);
+  var mesDesde = mesStr + "-01";
+  var diasEnMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  var diaActual = new Date().getDate();
+  var hace30 = (function() {
+    var d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  })();
+
+  var sucursales = data.sucursales || [];
+
+  // Costos fijos por sucursal + global desde localStorage
+  var getCF = function(key) {
+    try { return Number(localStorage.getItem("venecia_cf_" + key) || "0"); } catch(e) { return 0; }
+  };
+  var saveCF = function(key, val) {
+    try { localStorage.setItem("venecia_cf_" + key, String(val)); } catch(e) {}
+  };
+
+  // State: { [sucId]: number } + global
+  var initCFs = function() {
+    var obj = { global: getCF("global") };
+    sucursales.forEach(function(s) { obj[s.id] = getCF(s.id); });
+    return obj;
+  };
+  var initInputs = function() {
+    var obj = { global: getCF("global") > 0 ? String(getCF("global")) : "" };
+    sucursales.forEach(function(s) { obj[s.id] = getCF(s.id) > 0 ? String(getCF(s.id)) : ""; });
+    return obj;
+  };
+
+  const [cfs, setCfs] = useState(initCFs);
+  const [inputs, setInputs] = useState(initInputs);
+  const [tab, setTab] = useState("global");
+
+  var guardarCF = function(key, val) {
+    var n = Number(val);
+    if (!isNaN(n) && n >= 0) {
+      saveCF(key, n);
+      setCfs(function(prev) { return Object.assign({}, prev, (function(o){ o[key]=n; return o; })({})); });
+    }
+  };
+
+  // Calcular PE para una clave (global o sucursal id)
+  var calcPE = function(sucId) {
+    var ventasFiltro = sucId === "global"
+      ? data.ventas
+      : data.ventas.filter(function(v) { return v.sucursal_id === sucId; });
+
+    var vUlt30 = ventasFiltro.filter(function(v) { return v.fecha >= hace30 && v.fecha <= hoyStr; });
+    var ing30 = vUlt30.reduce(function(s,v){ return s+v.total; }, 0);
+    var cos30 = vUlt30.reduce(function(s,v){ return s+(v.costo_total||0); }, 0);
+    var margen = ing30 > 0 ? (ing30 - cos30) / ing30 : 0;
+
+    var vMes = ventasFiltro.filter(function(v) { return v.fecha >= mesDesde && v.fecha <= hoyStr; });
+    var totalMes = vMes.reduce(function(s,v){ return s+v.total; }, 0);
+
+    var cf = cfs[sucId] || 0;
+    var pe = margen > 0 && cf > 0 ? cf / margen : 0;
+    var progreso = pe > 0 ? Math.min(totalMes / pe, 1) : 0;
+    var proyeccion = diaActual > 0 ? (totalMes / diaActual) * diasEnMes : 0;
+
+    var diasMesArr = (function() {
+      var dias = []; var acum = 0;
+      for (var d = 1; d <= diaActual; d++) {
+        var fStr = mesStr + "-" + String(d).padStart(2, "0");
+        acum += ventasFiltro.filter(function(v){ return v.fecha === fStr; }).reduce(function(s,v){ return s+v.total; }, 0);
+        dias.push({ dia: d, acum: acum });
+      }
+      return dias;
+    })();
+
+    return { margen: margen, cf: cf, pe: pe, totalMes: totalMes, progreso: progreso, proyeccion: proyeccion, diasMes: diasMesArr };
+  };
+
+  var inputStyle = { padding: "10px 14px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 18, fontFamily: "Nunito, sans-serif", fontWeight: 900, outline: "none", boxSizing: "border-box", color: "#e74c3c", width: "100%" };
+
+  var tabs = [{ key: "global", label: "🌐 General" }].concat(sucursales.map(function(s) { return { key: s.id, label: "📍 " + s.nombre }; }));
+
+  var current = calcPE(tab);
+  var colorProgreso = current.progreso >= 1 ? "#27ae60" : current.progreso >= 0.7 ? "#e67e22" : "#e74c3c";
+  var bgProgreso = current.progreso >= 1 ? "#e8f8f1" : current.progreso >= 0.7 ? "#fff3e0" : "#fdecea";
+  var falta = Math.max(current.pe - current.totalMes, 0);
+  var superavit = current.totalMes > current.pe && current.pe > 0 ? current.totalMes - current.pe : 0;
 
   return (
     <div style={{ marginTop: 24 }}>
       <SectionTitle>Punto de Equilibrio</SectionTitle>
 
+      {/* Tabs sucursal */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {tabs.map(function(t) {
+          return (
+            <button key={t.key} onClick={function(){ setTab(t.key); }}
+              style={{ padding: "8px 18px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 13, fontFamily: "Nunito, sans-serif",
+                background: tab === t.key ? C.violeta : C.violetaPale,
+                color: tab === t.key ? "white" : C.violeta,
+                boxShadow: tab === t.key ? "0 4px 12px rgba(91,45,142,0.3)" : "none" }}>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
 
-        {/* ── Costos fijos ── */}
+        {/* Costos fijos */}
         <Card style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <h4 style={{ margin: "0 0 14px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>📋 Costos fijos mensuales</h4>
-          <div style={{ fontSize: 13, color: "#888", marginBottom: 16, lineHeight: 1.5 }}>
-            Ingresá el total de tus costos fijos del mes (alquiler, sueldos, servicios, etc.)
+          <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>
+            📋 Costos fijos — {tab === "global" ? "General" : (sucursales.find(function(s){ return s.id === tab; }) || {}).nombre}
+          </h4>
+          <div style={{ fontSize: 13, color: "#888", marginBottom: 14 }}>
+            Total mensual de costos fijos {tab === "global" ? "de toda la operación" : "de esta sucursal"}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <span style={{ fontSize: 20, fontWeight: 900, color: "#e74c3c" }}>$</span>
-            <input
-              type="number"
-              placeholder="Ej: 500000"
-              value={inputCF}
-              onChange={function(e) { setInputCF(e.target.value); }}
-              onBlur={function() { guardarCF(inputCF); }}
-              onKeyDown={function(e) { if (e.key === "Enter") { guardarCF(inputCF); e.target.blur(); } }}
-              style={{ ...inputStyle, flex: 1, fontSize: 18, fontWeight: 900, color: "#e74c3c", padding: "12px 16px" }}
-            />
+            <input type="number" placeholder="Ej: 500000"
+              value={inputs[tab] || ""}
+              onChange={function(e) { var v = e.target.value; setInputs(function(prev) { return Object.assign({}, prev, (function(o){ o[tab]=v; return o; })({})); }); }}
+              onBlur={function() { guardarCF(tab, inputs[tab] || "0"); }}
+              onKeyDown={function(e) { if (e.key === "Enter") { guardarCF(tab, inputs[tab] || "0"); e.target.blur(); } }}
+              style={inputStyle} />
           </div>
-          {totalCostosFijos > 0 && (
-            <div style={{ marginTop: 14, padding: "12px 16px", background: "#fdecea", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "#e74c3c", fontWeight: 700 }}>Total cargado</span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: "#e74c3c", fontFamily: "Baloo 2, cursive" }}>{fmt(totalCostosFijos)}</span>
+          {current.cf > 0 && (
+            <div style={{ marginTop: 12, padding: "10px 14px", background: "#fdecea", borderRadius: 10, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, color: "#e74c3c", fontWeight: 700 }}>Cargado</span>
+              <span style={{ fontSize: 20, fontWeight: 900, color: "#e74c3c", fontFamily: "Baloo 2, cursive" }}>{fmt(current.cf)}</span>
             </div>
           )}
-          {totalCostosFijos === 0 && (
-            <div style={{ marginTop: 14, textAlign: "center", color: "#ccc", fontSize: 12, fontWeight: 700 }}>
-              Ingresá un monto y presioná Enter o hacé click afuera para guardar
+          {current.cf === 0 && (
+            <div style={{ marginTop: 12, textAlign: "center", color: "#ccc", fontSize: 12, fontWeight: 700 }}>
+              Ingresá un monto y presioná Enter para guardar
             </div>
           )}
         </Card>
 
-        {/* ── Indicadores PE ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-          {/* Margen 30 días */}
-          <Card style={{ padding: "14px 18px" }}>
-            <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Margen últimos 30 días</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: margenUlt30 > 0 ? "#27ae60" : "#e74c3c", fontFamily: "Baloo 2, cursive" }}>
-              {(margenUlt30 * 100).toFixed(1)}%
+        {/* Indicadores */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Card style={{ padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Margen últimos 30 días</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: current.margen > 0 ? "#27ae60" : "#e74c3c", fontFamily: "Baloo 2, cursive" }}>
+              {(current.margen * 100).toFixed(1)}%
             </div>
-            <div style={{ fontSize: 11, color: "#aaa" }}>Ganancia / Ventas brutas</div>
+            <div style={{ fontSize: 11, color: "#aaa" }}>{tab === "global" ? "Todas las sucursales" : (sucursales.find(function(s){ return s.id === tab; }) || {}).nombre}</div>
           </Card>
-
-          {/* PE calculado */}
-          <Card style={{ padding: "14px 18px", borderLeft: "4px solid #e74c3c" }}>
-            <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Punto de equilibrio mensual</div>
-            {pe > 0 ? (
+          <Card style={{ padding: "12px 16px", borderLeft: "4px solid #e74c3c" }}>
+            <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Punto de equilibrio</div>
+            {current.pe > 0 ? (
               <>
-                <div style={{ fontSize: 26, fontWeight: 900, color: "#e74c3c", fontFamily: "Baloo 2, cursive" }}>{fmt(Math.round(pe))}</div>
-                <div style={{ fontSize: 11, color: "#aaa" }}>= {fmt(totalCostosFijos)} ÷ {(margenUlt30*100).toFixed(1)}%</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "#e74c3c", fontFamily: "Baloo 2, cursive" }}>{fmt(Math.round(current.pe))}</div>
+                <div style={{ fontSize: 11, color: "#aaa" }}>{fmt(current.cf)} ÷ {(current.margen*100).toFixed(1)}%</div>
               </>
             ) : (
               <div style={{ fontSize: 13, color: "#ccc", fontWeight: 700 }}>Cargá costos fijos para calcular</div>
             )}
           </Card>
-
-          {/* Proyección */}
-          {pe > 0 && diaActual > 0 && (
-            <Card style={{ padding: "14px 18px", borderLeft: "4px solid " + (proyeccion >= pe ? "#27ae60" : "#e67e22") }}>
-              <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Proyección a fin de mes</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: proyeccion >= pe ? "#27ae60" : "#e67e22", fontFamily: "Baloo 2, cursive" }}>{fmt(Math.round(proyeccion))}</div>
-              <div style={{ fontSize: 11, color: "#aaa" }}>
-                {proyeccion >= pe ? "✅ Proyectás superar el PE" : "⚠️ Proyectás no cubrir el PE"}
-              </div>
+          {current.pe > 0 && (
+            <Card style={{ padding: "12px 16px", borderLeft: "4px solid " + (current.proyeccion >= current.pe ? "#27ae60" : "#e67e22") }}>
+              <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Proyección fin de mes</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: current.proyeccion >= current.pe ? "#27ae60" : "#e67e22", fontFamily: "Baloo 2, cursive" }}>{fmt(Math.round(current.proyeccion))}</div>
+              <div style={{ fontSize: 11, color: "#aaa" }}>{current.proyeccion >= current.pe ? "✅ Proyectás superar el PE" : "⚠️ Proyectás no cubrir el PE"}</div>
             </Card>
           )}
         </div>
       </div>
 
-      {/* ── Barra de progreso + gráfico ── */}
-      {pe > 0 && (
+      {/* Barra + gráfico */}
+      {current.pe > 0 && (
         <Card style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>
-              📈 Progreso del mes — {mesStr.replace("-", "/")}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+            <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 16 }}>
+              📈 Progreso {mesStr.replace("-", "/")} — {tab === "global" ? "General" : (sucursales.find(function(s){ return s.id === tab; }) || {}).nombre}
             </h4>
-            <div style={{ fontSize: 13, fontWeight: 800, color: colorProgreso }}>
-              {fmt(ventasMesTotal)} de {fmt(Math.round(pe))}
+            <div style={{ fontSize: 13, fontWeight: 800, color: colorProgreso }}>{fmt(current.totalMes)} de {fmt(Math.round(current.pe))}</div>
+          </div>
+          <div style={{ background: C.violetaPale, borderRadius: 12, height: 26, marginBottom: 10, overflow: "hidden" }}>
+            <div style={{ width: (current.progreso * 100).toFixed(1) + "%", height: "100%", background: colorProgreso, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, transition: "width 0.6s" }}>
+              {current.progreso > 0.15 && <span style={{ color: "white", fontWeight: 900, fontSize: 12 }}>{(current.progreso*100).toFixed(0)}%</span>}
             </div>
           </div>
-
-          {/* Barra */}
-          <div style={{ background: C.violetaPale, borderRadius: 12, height: 28, marginBottom: 10, overflow: "hidden", position: "relative" }}>
-            <div style={{ width: (progreso * 100).toFixed(1) + "%", height: "100%", background: colorProgreso, borderRadius: 12, transition: "width 0.6s ease", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10 }}>
-              {progreso > 0.15 && (
-                <span style={{ color: "white", fontWeight: 900, fontSize: 13 }}>{(progreso * 100).toFixed(0)}%</span>
-              )}
+          <div style={{ background: bgProgreso, borderRadius: 10, padding: "9px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontWeight: 800, color: colorProgreso, fontSize: 13 }}>
+              {superavit > 0 ? "🎉 ¡Superaste el PE! +" + fmt(Math.round(superavit)) : "Faltan " + fmt(Math.round(falta)) + " para cubrir costos fijos"}
             </div>
+            <div style={{ fontSize: 12, color: "#aaa", fontWeight: 700 }}>Día {diaActual} de {diasEnMes}</div>
           </div>
-
-          {/* Estado */}
-          <div style={{ background: bgProgreso, borderRadius: 12, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontWeight: 800, color: colorProgreso, fontSize: 14 }}>
-              {superavit > 0
-                ? "🎉 ¡Superaste el PE! Estás " + fmt(Math.round(superavit)) + " por encima"
-                : "Faltan " + fmt(Math.round(falta)) + " para cubrir los costos fijos"}
-            </div>
-            <div style={{ fontSize: 12, color: "#aaa", fontWeight: 700 }}>
-              Día {diaActual} de {diasEnMes}
-            </div>
-          </div>
-
-          {/* Gráfico SVG */}
-          <div style={{ background: "white", borderRadius: 12, padding: "12px 8px 4px" }}>
-            <div style={{ display: "flex", gap: 16, fontSize: 11, color: "#aaa", marginBottom: 8, paddingLeft: 8, flexWrap: "wrap" }}>
+          <div style={{ background: "white", borderRadius: 10, padding: "10px 6px 4px" }}>
+            <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#aaa", marginBottom: 6, paddingLeft: 6, flexWrap: "wrap" }}>
               <span><span style={{ color: colorProgreso, fontWeight: 800 }}>─</span> Ventas acumuladas</span>
               <span><span style={{ color: "#e74c3c", fontWeight: 800 }}>- -</span> Punto de equilibrio</span>
               <span><span style={{ color: colorProgreso, fontWeight: 800, opacity: 0.5 }}>····</span> Proyección</span>
             </div>
-            <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
-              <rect x={PL} y={PT} width={chartW} height={chartH} fill={C.crema} rx="6" />
-              {ticks.map(function(t) {
-                var y = yScale(t);
-                return (
-                  <g key={t}>
-                    <line x1={PL} y1={y} x2={PL + chartW} y2={y} stroke={C.violetaLight} strokeWidth="0.8" strokeDasharray="3,3" />
-                    <text x={PL - 4} y={y + 4} textAnchor="end" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">
-                      {"$" + (t >= 1000 ? Math.round(t/1000) + "k" : t)}
-                    </text>
-                  </g>
-                );
-              })}
-              {pe > 0 && yPE > PT && yPE < PT + chartH && (
-                <g>
-                  <line x1={PL} y1={yPE} x2={PL + chartW} y2={yPE} stroke="#e74c3c" strokeWidth="2" strokeDasharray="6,3" />
-                  <text x={PL + chartW - 2} y={yPE - 5} textAnchor="end" fontSize="9" fill="#e74c3c" fontWeight="700" fontFamily="Nunito, sans-serif">
-                    {"PE $" + Math.round(pe / 1000) + "k"}
-                  </text>
-                </g>
-              )}
-              {diaActual < diasEnMes && diaActual > 0 && diasMes.length > 0 && (
-                <line x1={x1Proy} y1={y1Proy} x2={x2Proy} y2={y2Proy} stroke={colorProgreso} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.5" />
-              )}
-              {diasMes.length > 1 && (
-                <polygon
-                  points={[PL + "," + (PT + chartH), ...diasMes.map(function(p) { return xScale(p.dia) + "," + yScale(p.acum); }), xScale(diasMes[diasMes.length-1].dia) + "," + (PT + chartH)].join(" ")}
-                  fill={colorProgreso} opacity="0.12" />
-              )}
-              {diasMes.length > 1 && (
-                <polyline points={puntosVentas} fill="none" stroke={colorProgreso} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-              )}
-              {diasMes.length > 0 && (
-                <circle cx={xScale(diasMes[diasMes.length-1].dia)} cy={yScale(diasMes[diasMes.length-1].acum)} r="5" fill={colorProgreso} stroke="white" strokeWidth="2" />
-              )}
-              {[1, Math.round(diasEnMes/4), Math.round(diasEnMes/2), Math.round(diasEnMes*3/4), diasEnMes].map(function(d) {
-                return (
-                  <text key={d} x={PL + ((d-1)/Math.max(diasEnMes-1,1)) * chartW} y={H - 6} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">{d}</text>
-                );
-              })}
-              <text x={PL + chartW/2} y={H} textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="Nunito, sans-serif">días del mes</text>
-            </svg>
+            <PEChart pe={current.pe} ventasMesTotal={current.totalMes} diasMes={current.diasMes} diaActual={diaActual} diasEnMes={diasEnMes} colorProgreso={colorProgreso} />
           </div>
         </Card>
       )}
+
+      <div style={{ background: "#fff8e1", borderRadius: 12, padding: "10px 16px", fontSize: 12, color: "#b8860b", fontWeight: 600 }}>
+        ⚠️ Los costos fijos se guardan en este navegador/dispositivo.
+      </div>
     </div>
   );
 }
