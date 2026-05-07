@@ -1101,7 +1101,10 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     });
     setTicketVenta(nuevaVenta);
     setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre("");
-    // Imprimir automáticamente via iframe
+    // Imprimir automáticamente según configuración
+    var autoPrint = true;
+    try { var v = localStorage.getItem("venecia_conf_autoPrint"); autoPrint = v === null ? true : JSON.parse(v); } catch(e) {}
+    if (autoPrint) {
     setTimeout(function() {
       if (nuevaVenta) {
         var fp = nuevaVenta.formaPago === "efectivo" ? "Efectivo" : nuevaVenta.formaPago === "tarjeta" ? "Tarjeta/Debito" : nuevaVenta.formaPago === "qr" ? "QR/Transferencia" : nuevaVenta.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
@@ -1139,6 +1142,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         imprimirHTML(html);
       }
     }, 200);
+    } // fin if autoPrint
   };
 
   // Calcular totales de pagos mixtos
@@ -1866,6 +1870,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "retiros", icon: "💸", label: "Retiros" },
     { key: "productos", icon: "🍦", label: "Productos" },
     { key: "usuarios", icon: "👥", label: "Usuarios" },
+    { key: "configuracion", icon: "⚙️", label: "Configuración" },
   ];
 
   var tabActual = tabs.find(function(t) { return t.key === tab; });
@@ -1992,6 +1997,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "retiros" && <TabRetiros data={data} setData={setData} />}
           {tab === "productos" && <TabProductos data={data} setData={setData} />}
           {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
+          {tab === "configuracion" && <TabConfiguracion />}
         </div>
       </div>
     </div>
@@ -4255,6 +4261,67 @@ function TabProductos({ data, setData }) {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ─── TAB CONFIGURACIÓN (ADMIN) ───────────────────────────────────────────────
+function TabConfiguracion() {
+  var getConf = function(key, def) {
+    try { var v = localStorage.getItem("venecia_conf_" + key); return v === null ? def : JSON.parse(v); } catch(e) { return def; }
+  };
+  var setConf = function(key, val) {
+    try { localStorage.setItem("venecia_conf_" + key, JSON.stringify(val)); } catch(e) {}
+  };
+
+  const [autoPrint, setAutoPrint] = useState(function() { return getConf("autoPrint", true); });
+
+  var toggleAutoPrint = function(val) {
+    setAutoPrint(val);
+    setConf("autoPrint", val);
+  };
+
+  var cardStyle = { background: "white", borderRadius: 18, boxShadow: "0 2px 16px rgba(91,45,142,0.08)", padding: "22px 24px", marginBottom: 16 };
+  var descStyle = { fontSize: 13, color: "#888", marginTop: 6, lineHeight: 1.5 };
+
+  return (
+    <div>
+      <SectionTitle>Configuración del sistema</SectionTitle>
+
+      <div style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: C.violeta, marginBottom: 4 }}>🖨️ Impresión automática de tickets</div>
+            <div style={descStyle}>
+              <strong>Activada:</strong> al confirmar una venta el ticket se envía a imprimir automáticamente.<br />
+              <strong>Desactivada:</strong> se muestra el resumen de la venta en pantalla y se puede imprimir manualmente con el botón.
+            </div>
+            <div style={{ marginTop: 12, padding: "8px 14px", borderRadius: 10, display: "inline-block",
+              background: autoPrint ? "#e8f8f1" : "#fdecea",
+              color: autoPrint ? "#27ae60" : "#e74c3c", fontWeight: 800, fontSize: 13 }}>
+              Estado actual: {autoPrint ? "✅ Imprime automáticamente" : "⛔ Solo imprime manual"}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 160 }}>
+            <button onClick={function() { toggleAutoPrint(true); }}
+              style={{ padding: "12px 20px", borderRadius: 14, border: "3px solid " + (autoPrint ? "#27ae60" : "#ddd"), cursor: "pointer", fontWeight: 800, fontSize: 14, fontFamily: "Nunito, sans-serif",
+                background: autoPrint ? "#27ae60" : "#f8f8f8", color: autoPrint ? "white" : "#bbb",
+                boxShadow: autoPrint ? "0 4px 14px rgba(39,174,96,0.35)" : "none" }}>
+              ✅ Activar auto-impresión
+            </button>
+            <button onClick={function() { toggleAutoPrint(false); }}
+              style={{ padding: "12px 20px", borderRadius: 14, border: "3px solid " + (!autoPrint ? "#e74c3c" : "#ddd"), cursor: "pointer", fontWeight: 800, fontSize: 14, fontFamily: "Nunito, sans-serif",
+                background: !autoPrint ? "#e74c3c" : "#f8f8f8", color: !autoPrint ? "white" : "#bbb",
+                boxShadow: !autoPrint ? "0 4px 14px rgba(231,76,60,0.35)" : "none" }}>
+              ⛔ Desactivar auto-impresión
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: "#fff8e1", borderRadius: 14, padding: "12px 18px", fontSize: 13, color: "#b8860b", fontWeight: 600 }}>
+        ⚠️ Esta configuración se guarda en este navegador/dispositivo. Si usás el POS desde otra computadora, configuralo también desde allí.
+      </div>
     </div>
   );
 }
