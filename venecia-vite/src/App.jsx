@@ -59,6 +59,7 @@ async function cargarDatos() {
       ...p,
       stockKg: p.stock_kg,
       tipoCosto: p.tipo_costo,
+      sucursales_ids: p.sucursales_ids || null,
     })),
     insumos: insumos || [],
     cajas: (cajas || []).map(function(c) { return {
@@ -210,6 +211,7 @@ async function guardarProducto(producto) {
     tipo_costo: producto.tipoCosto,
     receta: producto.receta || [],
     activo: producto.activo,
+    sucursales_ids: producto.sucursales_ids || null,
   }
   if (producto.id && !String(producto.id).startsWith('new')) {
     await supabase.from('productos').update(data).eq('id', producto.id)
@@ -1301,7 +1303,14 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           </div>
           <div style={{ flex: 1, padding: "14px 16px", overflowY: "auto", background: C.blanco }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
-              {data.productos.filter((p) => p.activo && p.categoria === catActiva).map((prod) => {
+              {data.productos.filter((p) => {
+                if (!p.activo) return false;
+                if (p.categoria !== catActiva) return false;
+                if (p.sucursales_ids && p.sucursales_ids.length > 0 && sesion.sucursal) {
+                  if (!p.sucursales_ids.includes(sesion.sucursal.id)) return false;
+                }
+                return true;
+              }).map((prod) => {
                 const enCarrito = carrito.find((i) => i.id === prod.id);
                 return (
                   <button key={prod.id} onClick={() => agregarProducto(prod)}
@@ -1747,7 +1756,51 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                   style={{ flex:1, padding:"11px", borderRadius:12, border:`2px solid ${C.violetaLight}`, background:C.blanco, cursor:"pointer", fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
                   Cerrar
                 </button>
-                <button onClick={imprimirTicket}
+                <button onClick={function() {
+                  var consumoCorte = ventasCaja.filter(function(v){return v.formaPago==="consumo";}).reduce(function(s,v){return s+v.total;},0);
+                  var retirosCorte = (data.retiros||[]).filter(function(r){return r.cajaId===caja.id;});
+                  var totalRet = retirosCorte.reduce(function(s,r){return s+r.monto;},0);
+                  var efFisicoCorte = efectivoCorte - totalRet + (caja.montoInicial||0);
+                  var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR'); };
+                  var filasRetiros = retirosCorte.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
+                  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+                    'html,body{margin:0;padding:0;}' +
+                    'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+                    'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
+                    '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+                    'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
+                    'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+                    '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
+                    '.efisico{text-align:center;font-size:13px;font-weight:bold;border:1px solid #000;padding:2mm;margin:2mm 0;}' +
+                    '.cut{margin-top:6mm;padding-top:3mm;}' +
+                    '@page{size:80mm auto;margin:0;}' +
+                    '</style></head><body>' +
+                    '<h2>VENECIA</h2>' +
+                    '<div class="sub">Helados Artesanales</div>' +
+                    '<div class="sub">' + sesion.sucursal.nombre + '</div>' +
+                    '<hr>' +
+                    '<div class="sub">CORTE PARCIAL</div>' +
+                    '<div class="sub">' + fechaLegible(hoy()) + ' ' + horaCorte + '</div>' +
+                    '<div class="sub">' + sesion.usuario.nombre + '</div>' +
+                    '<div class="sub">Apertura: ' + caja.horaApertura + ' | Corte: ' + horaCorte + '</div>' +
+                    '<hr>' +
+                    '<table>' +
+                    '<tr><td>Ventas realizadas</td><td align="right">' + ventasCaja.length + '</td></tr>' +
+                    '<tr><td>Total acumulado</td><td align="right">' + fmt2(totalCorte) + '</td></tr>' +
+                    '</table><hr>' +
+                    '<table>' +
+                    '<tr><td>Efectivo</td><td align="right">' + fmt2(efectivoCorte) + '</td></tr>' +
+                    '<tr><td>Tarjeta/Debito</td><td align="right">' + fmt2(tarjetaCorte) + '</td></tr>' +
+                    '<tr><td>QR/Transfer.</td><td align="right">' + fmt2(qrCorte) + '</td></tr>' +
+                    (consumoCorte > 0 ? '<tr><td>Consumo empl.</td><td align="right">' + fmt2(consumoCorte) + '</td></tr>' : '') +
+                    filasRetiros +
+                    '</table><hr>' +
+                    '<div class="efisico">EFECTIVO FISICO: ' + fmt2(efFisicoCorte) + '</div>' +
+                    '<hr><div class="sub">** TURNO CONTINUA ABIERTO **</div>' +
+                    '<div class="cut"></div>' +
+                    '</body></html>';
+                  imprimirHTML(html);
+                }}
                   style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
                   🖨️ Imprimir corte
                 </button>
@@ -4190,7 +4243,7 @@ function TabProductos({ data, setData }) {
     try { return JSON.parse(localStorage.getItem("venecia_historial_precios") || "[]"); } catch { return []; }
   });
   const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [] });
+  const [form, setForm] = useState({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [], sucursales_ids: null });
   const emojis = ["🍦", "🍧", "🍨", "🥤", "🍌", "⭐", "🥛", "🍫", "🍓", "🍑", "🥭", "🧁", "🍬", "🍰", "🍭", "🎂", "📦", "🧊", "🍋", "❤️", "🎁", "⚡"];
 
   const costoCalculado = (f) => {
@@ -4205,7 +4258,7 @@ function TabProductos({ data, setData }) {
 
   const abrirForm = (prod = null) => {
     if (!prod) {
-      setForm({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [] });
+      setForm({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [], sucursales_ids: null });
       setEditando("nuevo");
       return;
     }
@@ -4221,6 +4274,7 @@ function TabProductos({ data, setData }) {
       categoria: prod.categoria || "productos",
       tipoCosto: prod.tipoCosto || "fijo",
       receta: recetaSegura,
+      sucursales_ids: prod.sucursales_ids || null,
     });
     setEditando(prod.id);
   };
@@ -4240,7 +4294,7 @@ function TabProductos({ data, setData }) {
   const guardar = () => {
     if (!form.nombre || !form.precio) return;
     const costoFinal = costoCalculado(form);
-    var prodData = { nombre: form.nombre, precio: Number(form.precio), costo: costoFinal, stockKg: Number(form.stockKg) || 0, emoji: form.emoji, categoria: form.categoria, tipoCosto: form.tipoCosto, receta: form.tipoCosto === "receta" ? form.receta : [], activo: true };
+    var prodData = { nombre: form.nombre, precio: Number(form.precio), costo: costoFinal, stockKg: Number(form.stockKg) || 0, emoji: form.emoji, categoria: form.categoria, tipoCosto: form.tipoCosto, receta: form.tipoCosto === "receta" ? form.receta : [], activo: true, sucursales_ids: form.sucursales_ids };
     if (editando === "nuevo") {
       var tempId = Date.now();
       guardarProducto({ ...prodData, id: null }).then(function(nuevo) {
@@ -4338,6 +4392,13 @@ function TabProductos({ data, setData }) {
                           {p.categoria === "promos" ? "⭐ Promo" : p.categoria === "pedidoya" ? "📦 Ped.Ya" : "🍦 Prod."}
                         </span>
                         {p.stockKg > 0 && <span style={{ fontSize: 11, background: C.mentaPale, color: "#2a7a5e", padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>{p.stockKg} kg</span>}
+                        {p.sucursales_ids && p.sucursales_ids.length > 0
+                          ? p.sucursales_ids.map(function(sid) {
+                              var suc = (data.sucursales || []).find(function(s){ return s.id === sid; });
+                              return suc ? <span key={sid} style={{ fontSize: 10, background: "#e8f0fe", color: "#2d5fa8", padding: "2px 7px", borderRadius: 6, fontWeight: 700 }}>📍{suc.nombre.split(" ").pop()}</span> : null;
+                            })
+                          : <span style={{ fontSize: 10, background: "#f0f0f0", color: "#aaa", padding: "2px 7px", borderRadius: 6, fontWeight: 700 }}>📍 Todas</span>
+                        }
                       </div>
                     </div>
 
@@ -4465,6 +4526,34 @@ function TabProductos({ data, setData }) {
                   <option value="promos">⭐ Promos</option>
                   <option value="pedidoya">📦 Pedido Ya</option>
                 </select>
+              </div>
+
+              {/* Sucursales habilitadas */}
+              <div>
+                <label style={{ fontSize: 12, color: C.violeta, fontWeight: 800, display: "block", marginBottom: 8, textTransform: "uppercase" }}>📍 Disponible en</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {(data.sucursales || []).map(function(s) {
+                    var habilitadas = form.sucursales_ids || data.sucursales.map(function(x){ return x.id; });
+                    var activo = habilitadas.includes(s.id);
+                    return (
+                      <button key={s.id} onClick={function() {
+                        var current = form.sucursales_ids || data.sucursales.map(function(x){ return x.id; });
+                        var next = activo
+                          ? current.filter(function(id){ return id !== s.id; })
+                          : [...current, s.id];
+                        setForm(function(f){ return { ...f, sucursales_ids: next.length === data.sucursales.length ? null : next }; });
+                      }}
+                        style={{ padding: "8px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 13, fontFamily: "Nunito, sans-serif",
+                          background: activo ? C.violeta : C.violetaPale,
+                          color: activo ? "white" : C.violetaLight }}>
+                        {activo ? "✅" : "⬜"} {s.nombre}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 6 }}>
+                  {!form.sucursales_ids ? "Disponible en todas las sucursales" : "Solo en las sucursales seleccionadas"}
+                </div>
               </div>
 
               {/* Nombre y precio */}
