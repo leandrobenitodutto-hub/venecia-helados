@@ -1119,12 +1119,12 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         }).join('') : '';
         var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
           'html,body{margin:0;padding:0;}' +
-          'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
-          'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
-          '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+          'body{font-family:Courier New,monospace;font-size:13px;font-weight:700;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+          'h2{text-align:center;font-size:16px;margin:2mm 0;letter-spacing:2px;font-weight:900;}' +
+          '.sub{text-align:center;font-size:12px;margin:1mm 0;font-weight:700;}' +
           'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
-          'table{width:100%;border-collapse:collapse;font-size:11px;}' +
-          '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
+          'table{width:100%;border-collapse:collapse;font-size:13px;font-weight:700;}' +
+          '.total{text-align:center;font-size:16px;font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000;padding:1mm 0;margin:2mm 0;}' +
           '.cut{margin-top:6mm;padding-top:3mm;}' +
           '@page{size:80mm auto;margin:0;}' +
           '</style></head><body>' +
@@ -1208,13 +1208,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       var filasRetiros = retirosC.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
         'html,body{margin:0;padding:0;}' +
-        'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
-        'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
-        '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+        'body{font-family:Courier New,monospace;font-size:13px;font-weight:700;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+        'h2{text-align:center;font-size:16px;margin:2mm 0;letter-spacing:2px;font-weight:900;}' +
+        '.sub{text-align:center;font-size:12px;margin:1mm 0;font-weight:700;}' +
         'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
-        'table{width:100%;border-collapse:collapse;font-size:11px;}' +
-        '.total{font-size:13px;font-weight:bold;border-top:1px solid #000;padding-top:1mm;margin-top:1mm;}' +
-        '.efisico{text-align:center;font-size:13px;font-weight:bold;border:1px solid #000;padding:2mm;margin:2mm 0;}' +
+        'table{width:100%;border-collapse:collapse;font-size:13px;font-weight:700;}' +
+        '.total{font-size:14px;font-weight:900;border-top:2px solid #000;padding-top:1mm;margin-top:1mm;}' +
+        '.efisico{text-align:center;font-size:14px;font-weight:900;border:2px solid #000;padding:2mm;margin:2mm 0;}' +
         '.cut{margin-top:6mm;padding-top:3mm;}' +
         '@page{size:80mm auto;margin:0;}' +
         '</style></head><body>' +
@@ -1407,12 +1407,12 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                       }).join('') : '';
                       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
                         'html,body{margin:0;padding:0;}' +
-                        'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
-                        'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
-                        '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+                        'body{font-family:Courier New,monospace;font-size:13px;font-weight:700;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+                        'h2{text-align:center;font-size:16px;margin:2mm 0;letter-spacing:2px;font-weight:900;}' +
+                        '.sub{text-align:center;font-size:12px;margin:1mm 0;font-weight:700;}' +
                         'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
-                        'table{width:100%;border-collapse:collapse;font-size:11px;}' +
-                        '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
+                        'table{width:100%;border-collapse:collapse;font-size:13px;font-weight:700;}' +
+                        '.total{text-align:center;font-size:16px;font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000;padding:1mm 0;margin:2mm 0;}' +
                         '.cut{margin-top:6mm;padding-top:3mm;}' +
                         '@page{size:80mm auto;margin:0;}' +
                         '</style></head><body>' +
@@ -1765,13 +1765,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                   var filasRetiros = retirosCorte.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
                   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
                     'html,body{margin:0;padding:0;}' +
-                    'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
-                    'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
-                    '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+                    'body{font-family:Courier New,monospace;font-size:13px;font-weight:700;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+                    'h2{text-align:center;font-size:16px;margin:2mm 0;letter-spacing:2px;font-weight:900;}' +
+                    '.sub{text-align:center;font-size:12px;margin:1mm 0;font-weight:700;}' +
                     'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
-                    'table{width:100%;border-collapse:collapse;font-size:11px;}' +
-                    '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
-                    '.efisico{text-align:center;font-size:13px;font-weight:bold;border:1px solid #000;padding:2mm;margin:2mm 0;}' +
+                    'table{width:100%;border-collapse:collapse;font-size:13px;font-weight:700;}' +
+                    '.total{text-align:center;font-size:16px;font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000;padding:1mm 0;margin:2mm 0;}' +
+                    '.efisico{text-align:center;font-size:14px;font-weight:900;border:2px solid #000;padding:2mm;margin:2mm 0;}' +
                     '.cut{margin-top:6mm;padding-top:3mm;}' +
                     '@page{size:80mm auto;margin:0;}' +
                     '</style></head><body>' +
