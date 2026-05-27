@@ -1116,13 +1116,15 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           return '<tr><td>' + (lb[p.medio]||p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR') + '</td></tr>';
         }).join('') : '';
         var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
-          'body{font-family:Courier New,monospace;font-size:11px;width:76mm;margin:0;padding:2mm;}' +
-          'h2{text-align:center;font-size:14px;margin:2mm 0;}' +
+          'html,body{margin:0;padding:0;}' +
+          'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+          'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
           '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
           'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
           'table{width:100%;border-collapse:collapse;font-size:11px;}' +
           '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
-          '@page{width:80mm;margin:0;}' +
+          '.cut{margin-top:6mm;padding-top:3mm;}' +
+          '@page{size:80mm auto;margin:0;}' +
           '</style></head><body>' +
           '<h2>VENECIA</h2>' +
           '<div class="sub">Helados Artesanales</div>' +
@@ -1138,6 +1140,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
           (nuevaVenta.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(nuevaVenta.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
           '<hr><div class="sub">Gracias por su visita!</div>' +
+          '<div class="cut"></div>' +
           '</body></html>';
         imprimirHTML(html);
       }
@@ -1202,14 +1205,16 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR'); };
       var filasRetiros = retirosC.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
-        'body{font-family:Courier New,monospace;font-size:11px;width:76mm;margin:0;padding:2mm;}' +
-        'h2{text-align:center;font-size:14px;margin:2mm 0;}' +
+        'html,body{margin:0;padding:0;}' +
+        'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+        'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
         '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
         'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
         'table{width:100%;border-collapse:collapse;font-size:11px;}' +
         '.total{font-size:13px;font-weight:bold;border-top:1px solid #000;padding-top:1mm;margin-top:1mm;}' +
         '.efisico{text-align:center;font-size:13px;font-weight:bold;border:1px solid #000;padding:2mm;margin:2mm 0;}' +
-        '@page{width:80mm;margin:0;}' +
+        '.cut{margin-top:6mm;padding-top:3mm;}' +
+        '@page{size:80mm auto;margin:0;}' +
         '</style></head><body>' +
         '<h2>VENECIA - CIERRE</h2>' +
         '<div class="sub">' + (sesion.sucursal ? sesion.sucursal.nombre : '') + '</div>' +
@@ -1229,6 +1234,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         '</table><hr>' +
         '<div class="efisico">EFECTIVO FISICO: ' + fmt2(efFisico) + '</div>' +
         '<hr><div class="sub">Fin del turno</div>' +
+        '<div class="cut"></div>' +
         '</body></html>';
       imprimirHTML(html);
     }, 200);
