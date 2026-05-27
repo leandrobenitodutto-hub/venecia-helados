@@ -1385,6 +1385,46 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                     var nombres = v.items.map(function(it) { return it.nombre; }).join(", ");
                     var resumen = nombres.length > 28 ? nombres.slice(0, 28) + "…" : nombres;
                     var icono = v.formaPago === "efectivo" ? "Efectivo" : v.formaPago === "tarjeta" ? "Tarjeta" : "QR";
+                    var numTicket = "#" + String(v.id).slice(-5).padStart(5, "0");
+                    var reimprimir = function(e) {
+                      e.stopPropagation();
+                      var fp = v.formaPago === "efectivo" ? "Efectivo" : v.formaPago === "tarjeta" ? "Tarjeta/Debito" : v.formaPago === "qr" ? "QR/Transferencia" : v.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
+                      var itemsHTML = v.items.map(function(it) {
+                        return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">$' + Number(it.subtotal).toLocaleString('es-AR') + '</td></tr>';
+                      }).join('');
+                      var pagosMixtos = v.pagosMixtos ? v.pagosMixtos.map(function(p) {
+                        var lb = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', qr: 'QR' };
+                        return '<tr><td>' + (lb[p.medio] || p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR') + '</td></tr>';
+                      }).join('') : '';
+                      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+                        'html,body{margin:0;padding:0;}' +
+                        'body{font-family:Courier New,monospace;font-size:11px;width:72mm;margin:0;padding:3mm 4mm 0 4mm;}' +
+                        'h2{text-align:center;font-size:14px;margin:2mm 0;letter-spacing:2px;}' +
+                        '.sub{text-align:center;font-size:10px;margin:1mm 0;}' +
+                        'hr{border:none;border-top:1px dashed #000;margin:2mm 0;}' +
+                        'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+                        '.total{text-align:center;font-size:14px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 0;margin:2mm 0;}' +
+                        '.cut{margin-top:6mm;padding-top:3mm;}' +
+                        '@page{size:80mm auto;margin:0;}' +
+                        '</style></head><body>' +
+                        '<h2>VENECIA</h2>' +
+                        '<div class="sub">Helados Artesanales</div>' +
+                        '<div class="sub">' + (sesion.sucursal ? sesion.sucursal.nombre : '') + '</div>' +
+                        '<hr>' +
+                        '<div class="sub">' + v.fecha + ' ' + v.hora + '</div>' +
+                        '<div class="sub">Atendio: ' + (v.usuario_nombre || sesion.usuario.nombre) + '</div>' +
+                        '<div class="sub">Ticket ' + numTicket + ' [COPIA]</div>' +
+                        '<hr>' +
+                        '<table>' + itemsHTML + '</table>' +
+                        '<hr>' +
+                        '<div class="total">TOTAL: $' + Number(v.total).toLocaleString('es-AR') + '</div>' +
+                        '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
+                        (v.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(v.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
+                        '<hr><div class="sub">Gracias por su visita!</div>' +
+                        '<div class="cut"></div>' +
+                        '</body></html>';
+                      imprimirHTML(html);
+                    };
                     return (
                       <div key={v.id} style={{ borderBottom: "1px solid " + C.violetaPale }}>
                         <div
@@ -1397,10 +1437,21 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                             <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
                               {v.hora} · {icono}
                             </div>
+                            <div style={{ fontSize: 10, color: C.violetaLight, fontWeight: 700, marginTop: 1 }}>
+                              {numTicket}
+                            </div>
                           </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontWeight: 900, color: "#27ae60", fontSize: 14 }}>{fmt(v.total)}</div>
-                            <div style={{ fontSize: 10, color: "#aaa" }}>{abierto ? "▲ cerrar" : "▼ ver"}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button
+                              onClick={reimprimir}
+                              title="Reimprimir ticket"
+                              style={{ background: "none", border: "1px solid " + C.violetaLight, borderRadius: 8, padding: "4px 7px", cursor: "pointer", fontSize: 14, lineHeight: 1, color: C.violeta }}>
+                              🖨️
+                            </button>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontWeight: 900, color: "#27ae60", fontSize: 14 }}>{fmt(v.total)}</div>
+                              <div style={{ fontSize: 10, color: "#aaa" }}>{abierto ? "▲ cerrar" : "▼ ver"}</div>
+                            </div>
                           </div>
                         </div>
                         {abierto && (
