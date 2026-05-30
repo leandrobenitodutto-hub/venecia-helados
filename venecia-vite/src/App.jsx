@@ -8,6 +8,32 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── Helpers de base de datos ──────────────────────────────────────────────────
 
+// Carga solo las ventas de los últimos 7 días para el POS (operación diaria)
+// Esto reduce drásticamente el consumo de datos en Supabase
+async function cargarVentasRecientes() {
+  const PAGINA = 1000;
+  let todas = [];
+  let desde = 0;
+  // Calcular fecha de hace 7 días en zona AR
+  var hace7dias = new Date();
+  hace7dias.setDate(hace7dias.getDate() - 7);
+  var fechaDesde = hace7dias.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  while (true) {
+    const { data, error } = await supabase
+      .from('ventas')
+      .select('*')
+      .gte('fecha', fechaDesde)
+      .order('id')
+      .range(desde, desde + PAGINA - 1);
+    if (error || !data || data.length === 0) break;
+    todas = todas.concat(data);
+    if (data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return todas;
+}
+
+// Carga TODAS las ventas históricas — solo usar desde el panel Admin cuando se necesite
 async function cargarTodasLasVentas() {
   const PAGINA = 1000;
   let todas = [];
@@ -27,6 +53,11 @@ async function cargarTodasLasVentas() {
 }
 
 async function cargarDatos() {
+  // Limitar rango de fechas para reducir consumo de datos en Supabase
+  var hace30dias = new Date();
+  hace30dias.setDate(hace30dias.getDate() - 30);
+  var fechaDesde30 = hace30dias.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+
   const [
     { data: sucursales },
     { data: usuarios },
@@ -43,12 +74,12 @@ async function cargarDatos() {
     supabase.from('usuarios').select('*').order('id'),
     supabase.from('productos').select('*').order('id'),
     supabase.from('insumos').select('*').order('id'),
-    supabase.from('cajas').select('*').order('id'),
-    supabase.from('retiros').select('*').order('id'),
-    supabase.from('consumos_empleado').select('*').order('id'),
+    supabase.from('cajas').select('*').gte('fecha', fechaDesde30).order('id'),
+    supabase.from('retiros').select('*').gte('fecha', fechaDesde30).order('id'),
+    supabase.from('consumos_empleado').select('*').gte('fecha', fechaDesde30).order('id'),
     supabase.from('historial_precios').select('*').order('id', { ascending: false }),
     supabase.from('consumidores').select('*').order('nombre'),
-    cargarTodasLasVentas(),
+    cargarVentasRecientes(),
   ])
 
   return {
@@ -4881,13 +4912,15 @@ export default function App() {
     });
   }, []);
 
-  // Recargar datos cada 30 segundos (para ver cambios de otras sucursales)
+  // Recargar datos cada 10 minutos SOLO cuando hay caja activa (empleada en POS)
+  // Antes: cada 30seg siempre = ~5760 recargas/dia. Ahora: ~72 recargas/dia. Reduccion 80x
   useEffect(function() {
+    if (!cajaActiva) return;
     var interval = setInterval(function() {
       cargarDatos().then(function(datos) { setData(datos); });
-    }, 30000);
+    }, 600000); // 10 minutos
     return function() { clearInterval(interval); };
-  }, []);
+  }, [cajaActiva]);
 
   const handleLogin = async function(s) {
     setSesion(s);
