@@ -79,7 +79,7 @@ async function cargarDatos() {
     supabase.from('consumos_empleado').select('*').gte('fecha', fechaDesde30).order('id'),
     supabase.from('historial_precios').select('*').order('id', { ascending: false }),
     supabase.from('consumidores').select('*').order('nombre'),
-    cargarVentasRecientes(),
+    cargarTodasLasVentas(),
   ])
 
   return {
