@@ -23,7 +23,7 @@ export async function cargarDatos() {
     supabase.from('productos').select('*').order('id'),
     supabase.from('insumos').select('*').order('id'),
     supabase.from('cajas').select('*').order('id'),
-    supabase.from('ventas').select('*').order('id'),
+    (async () => { let all = [], from = 0, size = 1000; while (true) { const { data } = await supabase.from('ventas').select('*').order('id').range(from, from + size - 1); if (!data || data.length === 0) break; all = all.concat(data); if (data.length < size) break; from += size; } return { data: all }; })(),
     supabase.from('retiros').select('*').order('id'),
     supabase.from('consumos_empleado').select('*').order('id'),
   ])
