@@ -1252,8 +1252,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         '<h2>VENECIA - CIERRE</h2>' +
         '<div class="sub">' + (sesion.sucursal ? sesion.sucursal.nombre : '') + '</div>' +
         '<div class="sub">Cajera: ' + sesion.usuario.nombre + '</div>' +
-        '<div class="sub">Apertura: ' + (caja.fecha ? caja.fecha.split('-').reverse().join('/') : '') + ' ' + (caja.horaApertura||'') + '</div>' +
-        '<div class="sub">Cierre: ' + fechaLegible(hoy()) + ' ' + horaCierre + '</div>' +
+        '<div class="sub">Apertura: ' + ((caja.fecha || hoy()).split('-').reverse().join('/')) + ' ' + (caja.horaApertura||'') + '</div>' +
+        '<div class="sub">Cierre: ' + (hoy().split('-').reverse().join('/')) + ' ' + horaCierre + '</div>' +
         '<hr>' +
         '<table>' +
         '<tr><td>Ventas del turno</td><td align="right">' + ventasCaja.length + '</td></tr>' +
@@ -1814,8 +1814,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                     '<div class="sub">CORTE PARCIAL</div>' +
                     '<div class="sub">' + fechaLegible(hoy()) + ' ' + horaCorte + '</div>' +
                     '<div class="sub">' + sesion.usuario.nombre + '</div>' +
-                    '<div class="sub">Apertura: ' + (caja.fecha ? caja.fecha.split('-').reverse().join('/') : '') + ' ' + caja.horaApertura + '</div>' +
-                    '<div class="sub">Corte: ' + fechaLegible(hoy()) + ' ' + horaCorte + '</div>' +
+                    '<div class="sub">Apertura: ' + ((caja.fecha || hoy()).split('-').reverse().join('/')) + ' ' + caja.horaApertura + '</div>' +
+                    '<div class="sub">Corte: ' + (hoy().split('-').reverse().join('/')) + ' ' + horaCorte + '</div>' +
                     '<hr>' +
                     '<table>' +
                     '<tr><td>Ventas realizadas</td><td align="right">' + ventasCaja.length + '</td></tr>' +
