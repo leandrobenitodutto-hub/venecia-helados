@@ -3036,29 +3036,39 @@ function TabVentas({ data }) {
               Cancelar
             </button>
             <button onClick={function() {
-                if (nuevaVentaForm.items.length === 0 || !nuevaVentaForm.fecha || !nuevaVentaForm.hora) return;
+                if (nuevaVentaForm.items.length === 0 || !nuevaVentaForm.fecha) return;
                 var total = nuevaVentaForm.items.reduce(function(s,it){return s+it.subtotal;},0);
                 var costoTotal = nuevaVentaForm.items.reduce(function(s,it){return s+(it.costo||0)*it.cantidad;},0);
                 var suc = data.sucursales.find(function(s){return s.id===Number(nuevaVentaForm.sucursal_id);});
-                var id = Date.now();
-                var venta = {
-                  id: id, fecha: nuevaVentaForm.fecha, hora: nuevaVentaForm.hora,
-                  sucursal_id: Number(nuevaVentaForm.sucursal_id),
+                var horaFinal = nuevaVentaForm.hora || new Date().toTimeString().slice(0,5);
+                var insertData = {
+                  fecha: nuevaVentaForm.fecha,
+                  hora: horaFinal,
+                  sucursal_id: Number(nuevaVentaForm.sucursal_id) || null,
                   sucursal_nombre: suc ? suc.nombre : "",
-                  usuario_id: null, usuario_nombre: "Admin (manual)",
-                  items: nuevaVentaForm.items, total: total, costo_total: costoTotal,
-                  forma_pago: nuevaVentaForm.formaPago, formaPago: nuevaVentaForm.formaPago,
-                  recibido: total, vuelto: 0, editada: true, caja_id: null,
+                  usuario_id: null,
+                  usuario_nombre: "Admin (manual)",
+                  items: nuevaVentaForm.items,
+                  total: total,
+                  costo_total: costoTotal,
+                  forma_pago: nuevaVentaForm.formaPago,
+                  recibido: total,
+                  vuelto: 0,
+                  editada: true,
+                  caja_id: null,
                 };
-                supabase.from('ventas').insert({
-                  id: venta.id, fecha: venta.fecha, hora: venta.hora,
-                  sucursal_id: venta.sucursal_id, sucursal_nombre: venta.sucursal_nombre,
-                  usuario_id: null, usuario_nombre: venta.usuario_nombre,
-                  items: venta.items, total: venta.total, costo_total: venta.costo_total,
-                  forma_pago: venta.forma_pago, recibido: venta.recibido, vuelto: 0, editada: true,
+                supabase.from('ventas').insert(insertData).select().single().then(function(res) {
+                  var guardada = res.data;
+                  if (guardada) {
+                    setData(function(prev){ return {...prev, ventas:[...prev.ventas, {
+                      ...guardada,
+                      formaPago: guardada.forma_pago,
+                      costo_total: guardada.costo_total,
+                    }]}; });
+                  }
                 });
-                setData(function(prev){ return {...prev, ventas:[...prev.ventas, venta]}; });
                 setMostrarNuevaVenta(false);
+                setNuevaVentaForm({ fecha: hoy(), hora: "", sucursal_id: data.sucursales[0]?.id || "", formaPago:"efectivo", items:[] });
               }}
               style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
               Guardar venta
