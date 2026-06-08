@@ -148,13 +148,16 @@ async function guardarVenta(venta) {
 }
 
 async function actualizarVenta(id, cambios) {
-  await supabase.from('ventas').update({
+  var update = {
     items: cambios.items,
     forma_pago: cambios.formaPago,
     total: cambios.total,
     costo_total: cambios.costo_total,
     editada: true,
-  }).eq('id', id)
+  };
+  if (cambios.fecha) update.fecha = cambios.fecha;
+  if (cambios.hora) update.hora = cambios.hora;
+  await supabase.from('ventas').update(update).eq('id', id)
 }
 
 async function guardarCaja(caja) {
@@ -2527,6 +2530,9 @@ function TabVentas({ data }) {
   const [ventaEditando, setVentaEditando] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editCat, setEditCat] = useState("productos");
+  const [mostrarNuevaVenta, setMostrarNuevaVenta] = useState(false);
+  const [nuevaVentaForm, setNuevaVentaForm] = useState({ fecha: hoy(), hora: "", sucursal_id: "", formaPago: "efectivo", items: [] });
+  const [nuevaVentaCat, setNuevaVentaCat] = useState("productos");
 
   const setAtajo = (tipo) => {
     const hoyStr = hoy();
@@ -2557,7 +2563,13 @@ function TabVentas({ data }) {
 
   return (
     <div>
-      <SectionTitle>Ventas</SectionTitle>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <SectionTitle>Ventas</SectionTitle>
+        <button onClick={function(){ setNuevaVentaForm({ fecha: hoy(), hora: new Date().toTimeString().slice(0,5), sucursal_id: data.sucursales[0]?.id || "", formaPago:"efectivo", items:[] }); setMostrarNuevaVenta(true); }}
+          style={{ padding:"10px 20px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontSize:14, fontFamily:"Nunito, sans-serif", boxShadow:"0 4px 14px rgba(91,45,142,0.35)" }}>
+          + Nueva venta
+        </button>
+      </div>
 
       <Card style={{ marginBottom: 14, padding: "14px 18px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -2720,8 +2732,24 @@ function TabVentas({ data }) {
           <h3 style={{ margin:"0 0 4px", color:C.violeta, fontFamily:"Baloo 2, cursive", fontSize:20 }}>
             Editar venta #{String(ventaEditando.id).slice(-5)}
           </h3>
-          <div style={{ fontSize:12, color:"#aaa", marginBottom:18 }}>
-            {fechaLegible(ventaEditando.fecha)} {ventaEditando.hora} · {ventaEditando.usuario_nombre}
+          <div style={{ fontSize:12, color:"#aaa", marginBottom:12 }}>
+            {ventaEditando.usuario_nombre}
+          </div>
+
+          {/* Fecha y hora */}
+          <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+            <div style={{ flex:1 }}>
+              <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>📅 Fecha</label>
+              <input type="date" value={editForm.fecha || ventaEditando.fecha}
+                onChange={function(e){ setEditForm({...editForm, fecha:e.target.value}); }}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, outline:"none", boxSizing:"border-box" }} />
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>🕐 Hora</label>
+              <input type="time" value={editForm.hora || ventaEditando.hora}
+                onChange={function(e){ setEditForm({...editForm, hora:e.target.value}); }}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid " + C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, outline:"none", boxSizing:"border-box" }} />
+            </div>
           </div>
 
           {/* Selector de productos - igual al POS */}
@@ -2848,17 +2876,192 @@ function TabVentas({ data }) {
                 if (editForm.items.length === 0) return;
                 var nuevoTotal = editForm.items.reduce(function(s,it){return s+it.subtotal;},0);
                 var nuevoCosto = editForm.items.reduce(function(s,it){return s+(it.costo||0)*it.cantidad;},0);
-                actualizarVenta(ventaEditando.id, { items: editForm.items, formaPago: editForm.formaPago, total: nuevoTotal, costo_total: nuevoCosto });
+                var nuevaFecha = editForm.fecha || ventaEditando.fecha;
+                var nuevaHora = editForm.hora || ventaEditando.hora;
+                actualizarVenta(ventaEditando.id, { items: editForm.items, formaPago: editForm.formaPago, total: nuevoTotal, costo_total: nuevoCosto, fecha: nuevaFecha, hora: nuevaHora });
                 setData(function(prev) {
                   return { ...prev, ventas: prev.ventas.map(function(v) {
                     if (v.id !== ventaEditando.id) return v;
-                    return {...v, items:editForm.items, formaPago:editForm.formaPago, forma_pago:editForm.formaPago, total:nuevoTotal, costo_total:nuevoCosto, editada:true};
+                    return {...v, items:editForm.items, formaPago:editForm.formaPago, forma_pago:editForm.formaPago, total:nuevoTotal, costo_total:nuevoCosto, editada:true, fecha:nuevaFecha, hora:nuevaHora};
                   })};
                 });
                 setVentaEditando(null); setEditForm(null);
               }}
               style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
               Guardar cambios
+            </button>
+          </div>
+        </Card>
+      </div>
+    )}
+    {/* ── MODAL NUEVA VENTA ── */}
+    {mostrarNuevaVenta && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(45,21,89,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:20 }}>
+        <Card style={{ maxWidth:520, width:"100%", maxHeight:"92vh", overflowY:"auto" }}>
+          <h3 style={{ margin:"0 0 16px", color:C.violeta, fontFamily:"Baloo 2, cursive", fontSize:20 }}>Nueva venta manual</h3>
+
+          {/* Fecha, hora, sucursal */}
+          <div style={{ display:"flex", gap:10, marginBottom:14 }}>
+            <div style={{ flex:1 }}>
+              <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>📅 Fecha</label>
+              <input type="date" value={nuevaVentaForm.fecha}
+                onChange={function(e){ setNuevaVentaForm({...nuevaVentaForm, fecha:e.target.value}); }}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid "+C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, outline:"none", boxSizing:"border-box" }} />
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>🕐 Hora</label>
+              <input type="time" value={nuevaVentaForm.hora}
+                onChange={function(e){ setNuevaVentaForm({...nuevaVentaForm, hora:e.target.value}); }}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid "+C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, outline:"none", boxSizing:"border-box" }} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom:14 }}>
+            <label style={{ fontSize:11, color:C.violeta, fontWeight:800, display:"block", marginBottom:5, textTransform:"uppercase" }}>📍 Sucursal</label>
+            <select value={nuevaVentaForm.sucursal_id}
+              onChange={function(e){ setNuevaVentaForm({...nuevaVentaForm, sucursal_id:Number(e.target.value)}); }}
+              style={{ width:"100%", padding:"9px 12px", borderRadius:10, border:"2px solid "+C.violetaLight, fontSize:13, fontFamily:"Nunito, sans-serif", fontWeight:600, outline:"none" }}>
+              {data.sucursales.map(function(s){ return <option key={s.id} value={s.id}>{s.nombre}</option>; })}
+            </select>
+          </div>
+
+          {/* Selector productos */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Agregar productos</div>
+            <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+              {["productos","promos","pedidoya"].map(function(cat) {
+                var labels = {productos:"Productos", promos:"Promos", pedidoya:"Pedido Ya"};
+                return (
+                  <button key={cat} onClick={function(){setNuevaVentaCat(cat);}}
+                    style={{ flex:1, padding:"6px 4px", borderRadius:8, border:"none", cursor:"pointer", fontSize:11, fontWeight:800, fontFamily:"Nunito, sans-serif",
+                      background: nuevaVentaCat===cat ? C.violeta : C.violetaPale,
+                      color: nuevaVentaCat===cat ? C.blanco : C.violetaMed }}>
+                    {labels[cat]}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:6, maxHeight:160, overflowY:"auto" }}>
+              {data.productos.filter(function(p){ return p.categoria===nuevaVentaCat && p.activo; }).map(function(p) {
+                return (
+                  <button key={p.id} onClick={function() {
+                      var existe = nuevaVentaForm.items.find(function(it){ return it.id===p.id; });
+                      if (existe) {
+                        setNuevaVentaForm({...nuevaVentaForm, items: nuevaVentaForm.items.map(function(it) {
+                          if (it.id!==p.id) return it;
+                          var nc = it.cantidad+1;
+                          return {...it, cantidad:nc, subtotal:nc*it.precio};
+                        })});
+                      } else {
+                        setNuevaVentaForm({...nuevaVentaForm, items:[...nuevaVentaForm.items, {
+                          id:p.id, nombre:p.nombre, emoji:p.emoji,
+                          cantidad:1, precio:p.precio, costo:p.costo||0,
+                          subtotal:p.precio, costo_total:p.costo||0
+                        }]});
+                      }
+                    }}
+                    style={{ padding:"8px 4px", borderRadius:10, border:"2px solid "+C.violetaPale, background:C.blanco, cursor:"pointer", textAlign:"center", fontFamily:"Nunito, sans-serif" }}>
+                    <div style={{ fontSize:18 }}>{p.emoji}</div>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.dark }}>{p.nombre}</div>
+                    <div style={{ fontSize:10, color:C.violeta, fontWeight:800 }}>{fmt(p.precio)}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Items seleccionados */}
+          {nuevaVentaForm.items.length > 0 && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Productos en la venta</div>
+              {nuevaVentaForm.items.map(function(item, idx) {
+                return (
+                  <div key={idx} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid "+C.violetaPale }}>
+                    <div style={{ flex:1, fontSize:13, fontWeight:700 }}>{item.nombre}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <button onClick={function(){
+                          setNuevaVentaForm({...nuevaVentaForm, items: nuevaVentaForm.items.map(function(it,i){
+                            if(i!==idx) return it;
+                            var nc=Math.max(1,it.cantidad-1);
+                            return {...it,cantidad:nc,subtotal:nc*it.precio};
+                          })});
+                        }}
+                        style={{ width:26, height:26, borderRadius:"50%", border:"2px solid "+C.violetaLight, background:C.blanco, cursor:"pointer", fontWeight:900, fontSize:14, color:C.violeta, display:"flex", alignItems:"center", justifyContent:"center" }}>−</button>
+                      <span style={{ fontSize:14, fontWeight:900, minWidth:24, textAlign:"center", color:C.violeta }}>{item.cantidad}</span>
+                      <button onClick={function(){
+                          setNuevaVentaForm({...nuevaVentaForm, items: nuevaVentaForm.items.map(function(it,i){
+                            if(i!==idx) return it;
+                            var nc=it.cantidad+1;
+                            return {...it,cantidad:nc,subtotal:nc*it.precio};
+                          })});
+                        }}
+                        style={{ width:26, height:26, borderRadius:"50%", border:"none", background:C.violeta, cursor:"pointer", fontWeight:900, fontSize:14, color:C.blanco, display:"flex", alignItems:"center", justifyContent:"center" }}>+</button>
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:900, color:C.violeta, minWidth:72, textAlign:"right" }}>{fmt(item.cantidad*item.precio)}</div>
+                    <button onClick={function(){ setNuevaVentaForm({...nuevaVentaForm, items:nuevaVentaForm.items.filter(function(_,i){return i!==idx;})}); }}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:"#e74c3c", fontSize:16 }}>✕</button>
+                  </div>
+                );
+              })}
+              <div style={{ display:"flex", justifyContent:"space-between", fontWeight:900, fontSize:16, color:C.violeta, paddingTop:10 }}>
+                <span>Total</span>
+                <span>{fmt(nuevaVentaForm.items.reduce(function(s,it){return s+it.subtotal;},0))}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Forma de pago */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Forma de pago</div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {["efectivo","tarjeta","qr","consumo"].map(function(fp) {
+                var labels = {efectivo:"💵 Efectivo", tarjeta:"💳 Tarjeta", qr:"📱 QR", consumo:"👤 Consumo"};
+                return (
+                  <button key={fp} onClick={function(){setNuevaVentaForm({...nuevaVentaForm, formaPago:fp});}}
+                    style={{ padding:"8px 14px", borderRadius:10, cursor:"pointer", fontSize:13, fontFamily:"Nunito, sans-serif",
+                      border: nuevaVentaForm.formaPago===fp ? "2px solid "+C.violeta : "2px solid "+C.violetaLight,
+                      background: nuevaVentaForm.formaPago===fp ? C.violetaPale : C.blanco,
+                      color: nuevaVentaForm.formaPago===fp ? C.violeta : "#555",
+                      fontWeight: nuevaVentaForm.formaPago===fp ? 800 : 600 }}>
+                    {labels[fp]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={function(){ setMostrarNuevaVenta(false); }}
+              style={{ flex:1, padding:"11px", borderRadius:12, border:"2px solid "+C.violetaLight, background:C.blanco, cursor:"pointer", fontWeight:700, fontFamily:"Nunito, sans-serif" }}>
+              Cancelar
+            </button>
+            <button onClick={function() {
+                if (nuevaVentaForm.items.length === 0 || !nuevaVentaForm.fecha || !nuevaVentaForm.hora) return;
+                var total = nuevaVentaForm.items.reduce(function(s,it){return s+it.subtotal;},0);
+                var costoTotal = nuevaVentaForm.items.reduce(function(s,it){return s+(it.costo||0)*it.cantidad;},0);
+                var suc = data.sucursales.find(function(s){return s.id===Number(nuevaVentaForm.sucursal_id);});
+                var id = Date.now();
+                var venta = {
+                  id: id, fecha: nuevaVentaForm.fecha, hora: nuevaVentaForm.hora,
+                  sucursal_id: Number(nuevaVentaForm.sucursal_id),
+                  sucursal_nombre: suc ? suc.nombre : "",
+                  usuario_id: null, usuario_nombre: "Admin (manual)",
+                  items: nuevaVentaForm.items, total: total, costo_total: costoTotal,
+                  forma_pago: nuevaVentaForm.formaPago, formaPago: nuevaVentaForm.formaPago,
+                  recibido: total, vuelto: 0, editada: true, caja_id: null,
+                };
+                supabase.from('ventas').insert({
+                  id: venta.id, fecha: venta.fecha, hora: venta.hora,
+                  sucursal_id: venta.sucursal_id, sucursal_nombre: venta.sucursal_nombre,
+                  usuario_id: null, usuario_nombre: venta.usuario_nombre,
+                  items: venta.items, total: venta.total, costo_total: venta.costo_total,
+                  forma_pago: venta.forma_pago, recibido: venta.recibido, vuelto: 0, editada: true,
+                });
+                setData(function(prev){ return {...prev, ventas:[...prev.ventas, venta]}; });
+                setMostrarNuevaVenta(false);
+              }}
+              style={{ flex:2, padding:"11px", borderRadius:12, border:"none", background:C.violeta, color:C.blanco, fontWeight:800, cursor:"pointer", fontFamily:"Nunito, sans-serif", fontSize:14 }}>
+              Guardar venta
             </button>
           </div>
         </Card>
