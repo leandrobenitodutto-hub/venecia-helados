@@ -2517,7 +2517,7 @@ function Dashboard({ data }) {
 
 
 // ─── TAB VENTAS ───────────────────────────────────────────────────────────────
-function TabVentas({ data }) {
+function TabVentas({ data, setData }) {
   const primerDia = data.ventas.length > 0
     ? [...data.ventas].sort((a,b) => a.fecha.localeCompare(b.fecha))[0].fecha
     : hoy();
