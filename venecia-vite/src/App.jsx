@@ -4552,7 +4552,7 @@ function TabProductos({ data, setData }) {
   };
 
   const guardar = () => {
-    if (!form.nombre || !form.precio) return;
+    if (!form.nombre.trim() || form.precio === "" || form.precio === null || isNaN(Number(form.precio))) return;
     const costoFinal = costoCalculado(form);
     var prodData = { nombre: form.nombre, precio: Number(form.precio), costo: costoFinal, stockKg: Number(form.stockKg) || 0, emoji: form.emoji, categoria: form.categoria, tipoCosto: form.tipoCosto, receta: form.tipoCosto === "receta" ? form.receta : [], activo: true, sucursales_ids: form.sucursales_ids };
     if (editando === "nuevo") {
