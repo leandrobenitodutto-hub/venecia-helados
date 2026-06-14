@@ -4499,6 +4499,7 @@ function TabProductos({ data, setData }) {
   const [categorias, setCategorias] = useState(getCategorias);
   const [editCatIdx, setEditCatIdx] = useState(null);
   const [catForm, setCatForm] = useState({ key: "", label: "", emoji: "🍦" });
+  const [mostrarEmojiCat, setMostrarEmojiCat] = useState(null); // "edit" | "nueva" | null
   const [historialPrecios, setHistorialPrecios] = useState(() => {
     try { return JSON.parse(localStorage.getItem("venecia_historial_precios") || "[]"); } catch { return []; }
   });
@@ -4626,24 +4627,38 @@ function TabProductos({ data, setData }) {
               return editCatIdx === idx ? (
                 <Card key={cat.key} style={{ padding: "12px 16px" }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <input value={catForm.emoji} onChange={function(e){ setCatForm(function(f){ return {...f, emoji: e.target.value}; }); }}
-                      style={{ width: 50, padding: "8px", borderRadius: 8, border: "2px solid "+C.violetaLight, fontSize: 18, textAlign: "center", fontFamily: "Nunito, sans-serif" }} />
+                    <button onClick={function(){ setMostrarEmojiCat(mostrarEmojiCat === "edit" ? null : "edit"); }}
+                      style={{ width: 50, height: 38, padding: "0", borderRadius: 8, border: "2px solid "+C.violetaLight, fontSize: 20, textAlign: "center", fontFamily: "Nunito, sans-serif", background:"white", cursor:"pointer" }}>
+                      {catForm.emoji}
+                    </button>
                     <input value={catForm.label} onChange={function(e){ setCatForm(function(f){ return {...f, label: e.target.value}; }); }}
                       placeholder="Nombre de la categoría"
                       style={{ flex: 1, minWidth: 140, padding: "8px 12px", borderRadius: 8, border: "2px solid "+C.violetaLight, fontSize: 13, fontWeight: 600, fontFamily: "Nunito, sans-serif" }} />
                     <button onClick={function() {
                         if (!catForm.label.trim()) return;
                         var nuevas = categorias.map(function(c,i){ return i===idx ? {...c, label: catForm.label.trim(), emoji: catForm.emoji || c.emoji} : c; });
-                        setCategorias(nuevas); saveCategorias(nuevas); setEditCatIdx(null);
+                        setCategorias(nuevas); saveCategorias(nuevas); setEditCatIdx(null); setMostrarEmojiCat(null);
                       }}
                       style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.violeta, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
                       Guardar
                     </button>
-                    <button onClick={function(){ setEditCatIdx(null); }}
+                    <button onClick={function(){ setEditCatIdx(null); setMostrarEmojiCat(null); }}
                       style={{ padding: "8px 16px", borderRadius: 8, border: "2px solid "+C.violetaLight, background: "white", cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
                       Cancelar
                     </button>
                   </div>
+                  {mostrarEmojiCat === "edit" && (
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(8, 1fr)", gap:6, marginTop:10, padding:10, background:C.crema, borderRadius:10, maxHeight:160, overflowY:"auto" }}>
+                      {emojis.map(function(e) {
+                        return (
+                          <button key={e} onClick={function(){ setCatForm(function(f){ return {...f, emoji:e}; }); setMostrarEmojiCat(null); }}
+                            style={{ fontSize:20, padding:"6px", borderRadius:8, border: catForm.emoji===e ? "2px solid "+C.violeta : "2px solid transparent", background: catForm.emoji===e ? C.violetaPale : "white", cursor:"pointer" }}>
+                            {e}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </Card>
               ) : (
                 <Card key={cat.key} style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -4683,9 +4698,10 @@ function TabProductos({ data, setData }) {
           <Card style={{ padding: "16px 18px" }}>
             <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 16 }}>+ Nueva categoría</h4>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input value={catForm.emoji} onChange={function(e){ setCatForm(function(f){ return {...f, emoji: e.target.value}; }); }}
-                placeholder="🍦" maxLength={4}
-                style={{ width: 60, padding: "9px", borderRadius: 10, border: "2px solid "+C.violetaLight, fontSize: 18, textAlign: "center", fontFamily: "Nunito, sans-serif" }} />
+              <button onClick={function(){ setMostrarEmojiCat(mostrarEmojiCat === "nueva" ? null : "nueva"); }}
+                style={{ width: 60, height: 40, padding: "0", borderRadius: 10, border: "2px solid "+C.violetaLight, fontSize: 20, textAlign: "center", fontFamily: "Nunito, sans-serif", background:"white", cursor:"pointer" }}>
+                {catForm.emoji}
+              </button>
               <input value={catForm.label} onChange={function(e){ setCatForm(function(f){ return {...f, label: e.target.value}; }); }}
                 placeholder="Nombre, ej: Bebidas"
                 style={{ flex: 1, minWidth: 160, padding: "9px 14px", borderRadius: 10, border: "2px solid "+C.violetaLight, fontSize: 13, fontWeight: 600, fontFamily: "Nunito, sans-serif" }} />
@@ -4698,11 +4714,24 @@ function TabProductos({ data, setData }) {
                   var nuevas = [...categorias, { key: key, label: label, emoji: catForm.emoji || "🏷️" }];
                   setCategorias(nuevas); saveCategorias(nuevas);
                   setCatForm({ key: "", label: "", emoji: "🍦" });
+                  setMostrarEmojiCat(null);
                 }}
                 style={{ padding: "9px 22px", borderRadius: 10, border: "none", background: C.violeta, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Nunito, sans-serif" }}>
                 Agregar
               </button>
             </div>
+            {mostrarEmojiCat === "nueva" && (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(8, 1fr)", gap:6, marginTop:10, padding:10, background:C.crema, borderRadius:10, maxHeight:160, overflowY:"auto" }}>
+                {emojis.map(function(e) {
+                  return (
+                    <button key={e} onClick={function(){ setCatForm(function(f){ return {...f, emoji:e}; }); setMostrarEmojiCat(null); }}
+                      style={{ fontSize:20, padding:"6px", borderRadius:8, border: catForm.emoji===e ? "2px solid "+C.violeta : "2px solid transparent", background: catForm.emoji===e ? C.violetaPale : "white", cursor:"pointer" }}>
+                      {e}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         </div>
       )}
