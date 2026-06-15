@@ -68,6 +68,7 @@ async function cargarDatos() {
     { data: consumosEmpleado },
     { data: historialPrecios },
     { data: consumidores },
+    { data: categorias },
     ventas,
   ] = await Promise.all([
     supabase.from('sucursales').select('*').order('id'),
@@ -79,6 +80,7 @@ async function cargarDatos() {
     supabase.from('consumos_empleado').select('*').gte('fecha', fechaDesde30).order('id'),
     supabase.from('historial_precios').select('*').order('id', { ascending: false }),
     supabase.from('consumidores').select('*').order('nombre'),
+    supabase.from('categorias').select('*').order('orden'),
     cargarTodasLasVentas(),
   ])
 
@@ -86,6 +88,7 @@ async function cargarDatos() {
     sucursales: sucursales || [],
     usuarios: usuarios || [],
     consumidores: consumidores || [],
+    categorias: (categorias && categorias.length > 0) ? categorias : CATEGORIAS_DEFAULT,
     productos: (productos || []).map(p => ({
       ...p,
       stockKg: p.stock_kg,
@@ -479,6 +482,11 @@ const INITIAL_DATA = {
   retiros: [],
   consumosEmpleado: [],
   consumidores: [],
+  categorias: [
+    { key: "productos", label: "Productos", emoji: "🍦", orden: 0 },
+    { key: "promos", label: "Promos", emoji: "⭐", orden: 1 },
+    { key: "pedidoya", label: "Pedido Ya", emoji: "📦", orden: 2 },
+  ],
   insumos: [
     { id: 1, nombre: "Helado (por kg)", costo: 8184 },
     { id: 2, nombre: "Pote telgopor chico", costo: 200 },
@@ -496,19 +504,25 @@ const fmt = (n) => `$${Number(n).toLocaleString("es-AR")}`;
 
 // ─── CATEGORÍAS DE PRODUCTOS ──────────────────────────────────────────────────
 const CATEGORIAS_DEFAULT = [
-  { key: "productos", label: "Productos", emoji: "🍦" },
-  { key: "promos", label: "Promos", emoji: "⭐" },
-  { key: "pedidoya", label: "Pedido Ya", emoji: "📦" },
+  { key: "productos", label: "Productos", emoji: "🍦", orden: 0 },
+  { key: "promos", label: "Promos", emoji: "⭐", orden: 1 },
+  { key: "pedidoya", label: "Pedido Ya", emoji: "📦", orden: 2 },
 ];
-function getCategorias() {
-  try {
-    var saved = JSON.parse(localStorage.getItem("venecia_categorias") || "null");
-    if (saved && Array.isArray(saved) && saved.length > 0) return saved;
-  } catch(e) {}
-  return CATEGORIAS_DEFAULT;
+async function guardarCategoria(cat) {
+  if (cat.id) {
+    await supabase.from('categorias').update({ label: cat.label, emoji: cat.emoji, orden: cat.orden }).eq('id', cat.id);
+  } else {
+    const { data } = await supabase.from('categorias').insert({ key: cat.key, label: cat.label, emoji: cat.emoji, orden: cat.orden }).select().single();
+    return data;
+  }
 }
-function saveCategorias(cats) {
-  try { localStorage.setItem("venecia_categorias", JSON.stringify(cats)); } catch(e) {}
+async function eliminarCategoria(id) {
+  await supabase.from('categorias').delete().eq('id', id);
+}
+async function actualizarOrdenCategorias(cats) {
+  await Promise.all(cats.map(function(c, i) {
+    return supabase.from('categorias').update({ orden: i }).eq('id', c.id);
+  }));
 }
 const hoy = () => {
   var d = new Date();
@@ -1079,7 +1093,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [pagos, setPagos] = useState([]); // [{medio, monto}]
   const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null); // quien consume
   const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
-  const [catActiva, setCatActiva] = useState(function(){ return getCategorias()[0].key; });
+  const [catActiva, setCatActiva] = useState(function(){ return (data.categorias && data.categorias[0]) ? data.categorias[0].key : "productos"; });
   const [mostrarCierre, setMostrarCierre] = useState(false);
   const [ticketCierre, setTicketCierre] = useState(null);
   const [mostrarCorte, setMostrarCorte] = useState(false);
@@ -1333,7 +1347,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Tabs categoria */}
           <div style={{ display: "flex", gap: 6, padding: "10px 14px 0", background: C.crema, borderBottom: `3px solid ${C.violeta}` }}>
-            {getCategorias().map((cat) => (
+            {(data.categorias || CATEGORIAS_DEFAULT).map((cat) => (
               <button key={cat.key} onClick={() => setCatActiva(cat.key)}
                 style={{
                   padding: "8px 16px", border: "none",
@@ -2542,10 +2556,10 @@ function TabVentas({ data, setData }) {
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [ventaEditando, setVentaEditando] = useState(null);
   const [editForm, setEditForm] = useState(null);
-  const [editCat, setEditCat] = useState(function(){ return getCategorias()[0].key; });
+  const [editCat, setEditCat] = useState(function(){ return (data.categorias && data.categorias[0]) ? data.categorias[0] : CATEGORIAS_DEFAULT[0].key; });
   const [mostrarNuevaVenta, setMostrarNuevaVenta] = useState(false);
   const [nuevaVentaForm, setNuevaVentaForm] = useState({ fecha: hoy(), hora: "", sucursal_id: "", formaPago: "efectivo", items: [] });
-  const [nuevaVentaCat, setNuevaVentaCat] = useState(function(){ return getCategorias()[0].key; });
+  const [nuevaVentaCat, setNuevaVentaCat] = useState(function(){ return (data.categorias && data.categorias[0]) ? data.categorias[0] : CATEGORIAS_DEFAULT[0].key; });
 
   const setAtajo = (tipo) => {
     const hoyStr = hoy();
@@ -2769,7 +2783,7 @@ function TabVentas({ data, setData }) {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Agregar producto</div>
             <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-              {getCategorias().map(function(cat) {
+              {(data.categorias || CATEGORIAS_DEFAULT).map(function(cat) {
                 return (
                   <button key={cat.key} onClick={function(){setEditCat(cat.key);}}
                     style={{ flex:1, padding:"6px 4px", borderRadius:8, border:"none", cursor:"pointer", fontSize:11, fontWeight:800, fontFamily:"Nunito, sans-serif",
@@ -2941,7 +2955,7 @@ function TabVentas({ data, setData }) {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:11, color:C.violeta, fontWeight:800, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Agregar productos</div>
             <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-              {getCategorias().map(function(cat) {
+              {(data.categorias || CATEGORIAS_DEFAULT).map(function(cat) {
                 return (
                   <button key={cat.key} onClick={function(){setNuevaVentaCat(cat.key);}}
                     style={{ flex:1, padding:"6px 4px", borderRadius:8, border:"none", cursor:"pointer", fontSize:11, fontWeight:800, fontFamily:"Nunito, sans-serif",
@@ -4496,7 +4510,7 @@ function TabRetiros({ data, setData }) {
 // ─── TAB PRODUCTOS ─────────────────────────────────────────────────────────────
 function TabProductos({ data, setData }) {
   const [subTab, setSubTab] = useState("productos"); // "productos" | "insumos" | "historial" | "categorias"
-  const [categorias, setCategorias] = useState(getCategorias);
+  const categorias = data.categorias || CATEGORIAS_DEFAULT;
   const [editCatIdx, setEditCatIdx] = useState(null);
   const [catForm, setCatForm] = useState({ key: "", label: "", emoji: "🍦" });
   const [mostrarEmojiCat, setMostrarEmojiCat] = useState(null); // "edit" | "nueva" | null
@@ -4636,8 +4650,12 @@ function TabProductos({ data, setData }) {
                       style={{ flex: 1, minWidth: 140, padding: "8px 12px", borderRadius: 8, border: "2px solid "+C.violetaLight, fontSize: 13, fontWeight: 600, fontFamily: "Nunito, sans-serif" }} />
                     <button onClick={function() {
                         if (!catForm.label.trim()) return;
-                        var nuevas = categorias.map(function(c,i){ return i===idx ? {...c, label: catForm.label.trim(), emoji: catForm.emoji || c.emoji} : c; });
-                        setCategorias(nuevas); saveCategorias(nuevas); setEditCatIdx(null); setMostrarEmojiCat(null);
+                        var cat = categorias[idx];
+                        var actualizado = {...cat, label: catForm.label.trim(), emoji: catForm.emoji || cat.emoji};
+                        guardarCategoria(actualizado);
+                        var nuevas = categorias.map(function(c,i){ return i===idx ? actualizado : c; });
+                        setData(function(prev){ return {...prev, categorias: nuevas}; });
+                        setEditCatIdx(null); setMostrarEmojiCat(null);
                       }}
                       style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.violeta, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
                       Guardar
@@ -4668,10 +4686,10 @@ function TabProductos({ data, setData }) {
                     <div style={{ fontSize: 11, color: "#aaa" }}>{enUso} producto{enUso !== 1 ? "s" : ""} · clave: {cat.key}</div>
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={function(){ if(idx>0){ var n=[...categorias]; var tmp=n[idx-1]; n[idx-1]=n[idx]; n[idx]=tmp; setCategorias(n); saveCategorias(n); } }}
+                    <button onClick={function(){ if(idx>0){ var n=[...categorias]; var tmp=n[idx-1]; n[idx-1]=n[idx]; n[idx]=tmp; actualizarOrdenCategorias(n); setData(function(prev){ return {...prev, categorias:n}; }); } }}
                       disabled={idx===0}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "2px solid "+C.violetaLight, background: "white", cursor: idx===0?"default":"pointer", fontSize: 12, opacity: idx===0?0.3:1, fontFamily:"Nunito, sans-serif" }}>↑</button>
-                    <button onClick={function(){ if(idx<categorias.length-1){ var n=[...categorias]; var tmp=n[idx+1]; n[idx+1]=n[idx]; n[idx]=tmp; setCategorias(n); saveCategorias(n); } }}
+                    <button onClick={function(){ if(idx<categorias.length-1){ var n=[...categorias]; var tmp=n[idx+1]; n[idx+1]=n[idx]; n[idx]=tmp; actualizarOrdenCategorias(n); setData(function(prev){ return {...prev, categorias:n}; }); } }}
                       disabled={idx===categorias.length-1}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "2px solid "+C.violetaLight, background: "white", cursor: idx===categorias.length-1?"default":"pointer", fontSize: 12, opacity: idx===categorias.length-1?0.3:1, fontFamily:"Nunito, sans-serif" }}>↓</button>
                     <button onClick={function(){ setEditCatIdx(idx); setCatForm({ key: cat.key, label: cat.label, emoji: cat.emoji }); }}
@@ -4682,8 +4700,9 @@ function TabProductos({ data, setData }) {
                         if (enUso > 0) { alert("No se puede eliminar: hay " + enUso + " producto(s) usando esta categoría. Cambiá su categoría primero."); return; }
                         if (categorias.length <= 1) { alert("Debe quedar al menos una categoría."); return; }
                         if (!window.confirm("¿Eliminar la categoría \"" + cat.label + "\"?")) return;
+                        eliminarCategoria(cat.id);
                         var nuevas = categorias.filter(function(_,i){ return i!==idx; });
-                        setCategorias(nuevas); saveCategorias(nuevas);
+                        setData(function(prev){ return {...prev, categorias: nuevas}; });
                       }}
                       style={{ padding: "6px 14px", borderRadius: 8, border: "2px solid #ffb3b3", background: "white", color: "#e74c3c", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
                       Eliminar
@@ -4711,8 +4730,11 @@ function TabProductos({ data, setData }) {
                   var key = label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
                   if (!key) return;
                   if (categorias.find(function(c){ return c.key === key; })) { alert("Ya existe una categoría con esa clave. Elegí otro nombre."); return; }
-                  var nuevas = [...categorias, { key: key, label: label, emoji: catForm.emoji || "🏷️" }];
-                  setCategorias(nuevas); saveCategorias(nuevas);
+                  var nueva = { key: key, label: label, emoji: catForm.emoji || "🏷️", orden: categorias.length };
+                  guardarCategoria(nueva).then(function(insertada) {
+                    var conId = insertada || nueva;
+                    setData(function(prev){ return {...prev, categorias: [...(prev.categorias||[]), conId]}; });
+                  });
                   setCatForm({ key: "", label: "", emoji: "🍦" });
                   setMostrarEmojiCat(null);
                 }}
@@ -4771,7 +4793,7 @@ function TabProductos({ data, setData }) {
                       </div>
                       <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                         {(function() {
-                          var cat = getCategorias().find(function(c){ return c.key === p.categoria; }) || { emoji:"🍦", label:"Prod." };
+                          var cat = (data.categorias || CATEGORIAS_DEFAULT).find(function(c){ return c.key === p.categoria; }) || { emoji:"🍦", label:"Prod." };
                           var colores = { productos: [C.violetaPale, C.violeta], promos: [C.amarilloLight, "#8a6500"], pedidoya: [C.mentaPale, "#2a7a5e"] };
                           var col = colores[p.categoria] || [C.violetaPale, C.violeta];
                           return (
@@ -4911,7 +4933,7 @@ function TabProductos({ data, setData }) {
               <div>
                 <label style={{ fontSize: 12, color: C.violeta, fontWeight: 800, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Categoría</label>
                 <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} style={inputStyle}>
-                  {getCategorias().map(function(cat) {
+                  {(data.categorias || CATEGORIAS_DEFAULT).map(function(cat) {
                     return <option key={cat.key} value={cat.key}>{cat.emoji} {cat.label}</option>;
                   })}
                 </select>
