@@ -5278,10 +5278,11 @@ function TabClientesVip({ data, setData }) {
     reader.onload = function(ev) {
       try {
         var XLSX = window.XLSX;
-        if (!XLSX) { alert("Error: librería Excel no disponible"); setImportando(false); return; }
-        var wb = XLSX.read(ev.target.result, { type: "binary" });
+        if (!XLSX) { alert("Error: librería Excel no disponible. Recargá la página e intentá de nuevo."); setImportando(false); return; }
+        var data = new Uint8Array(ev.target.result);
+        var wb = XLSX.read(data, { type: "array" });
         var ws = wb.Sheets[wb.SheetNames[0]];
-        var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
         var nuevos = [];
         for (var i = 1; i < rows.length; i++) {
           var row = rows[i];
@@ -5292,11 +5293,13 @@ function TabClientesVip({ data, setData }) {
           if (!nombre || !apellido || !dni) continue;
           nuevos.push({ nombre: nombre, apellido: apellido, dni: dni, activo: true });
         }
-        if (nuevos.length === 0) { alert("No se encontraron datos válidos. El archivo debe tener columnas: Nombre | Apellido | DNI"); setImportando(false); return; }
+        if (nuevos.length === 0) { alert("No se encontraron datos válidos.\nVerificá que el archivo tenga columnas: Nombre | Apellido | DNI"); setImportando(false); return; }
         supabase.from('clientes_preferenciales').insert(nuevos).select().then(function(res) {
-          if (res.data) {
+          if (res.data && res.data.length > 0) {
             setData(function(prev){ return {...prev, clientesVip: [...(prev.clientesVip||[]), ...res.data]}; });
             alert("✅ Se importaron " + res.data.length + " clientes correctamente.");
+          } else if (res.error) {
+            alert("Error al guardar: " + res.error.message);
           }
           setImportando(false);
         });
@@ -5305,7 +5308,7 @@ function TabClientesVip({ data, setData }) {
         setImportando(false);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = "";
   };
 
