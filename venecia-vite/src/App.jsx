@@ -69,6 +69,7 @@ async function cargarDatos() {
     { data: historialPrecios },
     { data: consumidores },
     { data: categorias },
+    { data: clientesVip },
     ventas,
   ] = await Promise.all([
     supabase.from('sucursales').select('*').order('id'),
@@ -81,6 +82,7 @@ async function cargarDatos() {
     supabase.from('historial_precios').select('*').order('id', { ascending: false }),
     supabase.from('consumidores').select('*').order('nombre'),
     supabase.from('categorias').select('*').order('orden'),
+    supabase.from('clientes_preferenciales').select('*').order('apellido'),
     cargarTodasLasVentas(),
   ])
 
@@ -89,6 +91,7 @@ async function cargarDatos() {
     usuarios: usuarios || [],
     consumidores: consumidores || [],
     categorias: (categorias && categorias.length > 0) ? categorias : CATEGORIAS_DEFAULT,
+    clientesVip: clientesVip || [],
     productos: (productos || []).map(p => ({
       ...p,
       stockKg: p.stock_kg,
@@ -482,6 +485,7 @@ const INITIAL_DATA = {
   retiros: [],
   consumosEmpleado: [],
   consumidores: [],
+  clientesVip: [],
   categorias: [
     { key: "productos", label: "Productos", emoji: "🍦", orden: 0 },
     { key: "promos", label: "Promos", emoji: "⭐", orden: 1 },
@@ -1087,6 +1091,8 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [carrito, setCarrito] = useState([]);
   const [formaPago, setFormaPago] = useState("");
   const [recibido, setRecibido] = useState("");
+  const [descuento, setDescuento] = useState(0); // porcentaje 0-100
+  const [descuentoInput, setDescuentoInput] = useState("");
   const [ticketVenta, setTicketVenta] = useState(null);
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [paso, setPaso] = useState("productos");
@@ -1101,7 +1107,9 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [retiroMonto, setRetiroMonto] = useState("");
   const [retiroMotivo, setRetiroMotivo] = useState("");
 
-  const total = carrito.reduce((s, i) => s + i.subtotal, 0);
+  const totalBruto = carrito.reduce((s, i) => s + i.subtotal, 0);
+  const montoDescuento = descuento > 0 ? Math.round(totalBruto * descuento / 100) : 0;
+  const total = totalBruto - montoDescuento;
   const vuelto = recibido && formaPago === "efectivo" ? Math.max(0, Number(recibido) - total) : 0;
   const cantItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
@@ -1167,7 +1175,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       return next;
     });
     setTicketVenta(nuevaVenta);
-    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre("");
+    setCarrito([]); setFormaPago(""); setRecibido(""); setPaso("productos"); setPagos([]); setEmpleadaConsumoId(null); setEmpleadaConsumoNombre(""); setDescuento(0); setDescuentoInput("");
     // Imprimir automáticamente según configuración
     var autoPrint = true;
     try { var v = localStorage.getItem("venecia_conf_autoPrint"); autoPrint = v === null ? true : JSON.parse(v); } catch(e) {}
@@ -1203,6 +1211,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           '<hr>' +
           '<table>' + items + '</table>' +
           '<hr>' +
+          (descuento > 0 ? '<table><tr><td>Subtotal</td><td align="right">$' + Number(totalBruto).toLocaleString('es-AR') + '</td></tr><tr><td>Descuento ' + descuento + '%</td><td align="right">-$' + Number(montoDescuento).toLocaleString('es-AR') + '</td></tr></table>' : '') +
           '<div class="total">TOTAL: $' + Number(nuevaVenta.total).toLocaleString('es-AR') + '</div>' +
           '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
           (nuevaVenta.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(nuevaVenta.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
@@ -1439,6 +1448,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                   {ventasCaja.length}
                 </span>
               )}
+            </button>
+            <button onClick={() => setPaso("vip")}
+              style={{ flex: 1, padding: "9px 6px", border: "none", borderRadius: 10,
+                background: paso === "vip" ? C.amarillo : C.violetaPale,
+                color: paso === "vip" ? "#7a5200" : C.violetaMed,
+                fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
+              ⭐ VIP
             </button>
           </div>
 
@@ -1723,7 +1739,51 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           )}
 
           {/* Footer total — solo en vista pedido/pago */}
-          {paso !== "ventas" && (<div style={{ padding: "14px 16px", borderTop: "3px solid " + C.violetaPale, background: C.blanco }}>
+          {paso === "vip" && (
+            <PanelVIP clientesVip={data.clientesVip || []} />
+          )}
+            <div style={{ background: C.blanco }}>
+
+              {/* ── DESCUENTO ── */}
+              {carrito.length > 0 && paso === "productos" && (
+                <div style={{ padding: "10px 14px", background: "#fffde7", borderTop: "1px solid #ffe082" }}>
+                  <div style={{ fontSize: 11, color: "#b8860b", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                    🏷️ Descuento
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: descuento > 0 ? 8 : 0 }}>
+                    {[0, 10, 15, 20].map(function(pct) {
+                      var activo = pct === 0 ? (descuento === 0) : (descuento === pct);
+                      return (
+                        <button key={pct} onClick={function(){ setDescuento(pct); setDescuentoInput(pct > 0 ? String(pct) : ""); }}
+                          style={{ padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "Nunito, sans-serif",
+                            background: activo ? C.amarillo : "#f0f0f0",
+                            color: activo ? "#7a5200" : "#aaa" }}>
+                          {pct === 0 ? "Sin dto." : pct + "%"}
+                        </button>
+                      );
+                    })}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 80 }}>
+                      <input type="number" min="0" max="100" placeholder="%" value={descuentoInput}
+                        onChange={function(e) {
+                          var v = e.target.value;
+                          setDescuentoInput(v);
+                          var n = Number(v);
+                          if (!isNaN(n) && n >= 0 && n <= 100) setDescuento(n);
+                        }}
+                        style={{ width: "100%", padding: "6px 10px", borderRadius: 10, border: "2px solid #ffe082", fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 700, outline: "none", boxSizing: "border-box", background: "white" }} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#aaa" }}>%</span>
+                    </div>
+                  </div>
+                  {descuento > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#e74c3c" }}>
+                      <span>Descuento {descuento}%</span>
+                      <span>− {fmt(montoDescuento)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ padding: "14px 16px", borderTop: "3px solid " + C.violetaPale }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ color: C.violetaMed, fontWeight: 700, fontSize: 13 }}>TOTAL</span>
               <span style={{ fontSize: 26, fontWeight: 900, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>{fmt(total)}</span>
@@ -1753,7 +1813,9 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                 ✓ Confirmar venta
               </button>
             )}
-          </div>)}
+          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2044,6 +2106,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "productos", icon: "🍦", label: "Productos" },
     { key: "usuarios", icon: "👥", label: "Usuarios" },
     { key: "configuracion", icon: "⚙️", label: "Configuración" },
+    { key: "clientesvip", icon: "⭐", label: "Clientes VIP" },
   ];
 
   var tabActual = tabs.find(function(t) { return t.key === tab; });
@@ -2171,6 +2234,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "productos" && <TabProductos data={data} setData={setData} />}
           {tab === "usuarios" && <TabUsuarios data={data} setData={setData} />}
           {tab === "configuracion" && <TabConfiguracion />}
+          {tab === "clientesvip" && <TabClientesVip data={data} setData={setData} />}
         </div>
       </div>
     </div>
@@ -5093,6 +5157,291 @@ function TabProductos({ data, setData }) {
   );
 }
 
+// ─── PANEL VIP (POS) ─────────────────────────────────────────────────────────
+function PanelVIP({ clientesVip }) {
+  const [dni, setDni] = useState("");
+  const [resultado, setResultado] = useState(null); // null | "encontrado" | "no_encontrado"
+  const [cliente, setCliente] = useState(null);
+
+  var buscar = function() {
+    var q = dni.trim().replace(/\D/g, "");
+    if (!q) return;
+    var encontrado = clientesVip.find(function(c) { return c.dni === q && c.activo !== false; });
+    if (encontrado) { setCliente(encontrado); setResultado("encontrado"); }
+    else { setCliente(null); setResultado("no_encontrado"); }
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 14px", overflowY: "auto" }}>
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div style={{ fontSize: 36, marginBottom: 6 }}>⭐</div>
+        <div style={{ fontWeight: 900, color: C.violeta, fontSize: 16, fontFamily: "Baloo 2, cursive" }}>Clientes Preferenciales</div>
+        <div style={{ fontSize: 12, color: "#aaa", fontWeight: 600 }}>Consultá si el cliente tiene beneficios</div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input
+          type="text" inputMode="numeric" placeholder="Ingresá el DNI"
+          value={dni}
+          onChange={function(e) { setDni(e.target.value); setResultado(null); setCliente(null); }}
+          onKeyDown={function(e) { if (e.key === "Enter") buscar(); }}
+          style={{ flex: 1, padding: "11px 14px", borderRadius: 12, border: "2px solid " + C.violetaLight,
+            fontSize: 16, fontFamily: "Nunito, sans-serif", fontWeight: 700, outline: "none", boxSizing: "border-box" }} />
+        <button onClick={buscar}
+          style={{ padding: "11px 18px", borderRadius: 12, border: "none", background: C.violeta, color: "white",
+            fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Nunito, sans-serif" }}>
+          Buscar
+        </button>
+      </div>
+
+      {resultado === "encontrado" && cliente && (
+        <div style={{ background: "#e8f8f1", border: "2px solid #27ae60", borderRadius: 16, padding: "20px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#1a6b44", fontFamily: "Baloo 2, cursive", marginBottom: 4 }}>
+            {cliente.nombre} {cliente.apellido}
+          </div>
+          <div style={{ fontSize: 14, color: "#2a7a5e", fontWeight: 700, marginBottom: 12 }}>
+            DNI {cliente.dni}
+          </div>
+          <div style={{ background: "#27ae60", color: "white", borderRadius: 20, padding: "8px 20px", display: "inline-block", fontWeight: 800, fontSize: 13 }}>
+            ✅ Cliente preferencial habilitado
+          </div>
+        </div>
+      )}
+
+      {resultado === "no_encontrado" && (
+        <div style={{ background: "#fdecea", border: "2px solid #e74c3c", borderRadius: 16, padding: "20px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>❌</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#c0392b", marginBottom: 4 }}>
+            DNI no encontrado
+          </div>
+          <div style={{ fontSize: 13, color: "#aaa" }}>
+            Este cliente no figura en el listado de preferenciales
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: "auto", paddingTop: 16, fontSize: 11, color: "#ccc", textAlign: "center", fontWeight: 600 }}>
+        {clientesVip.filter(function(c){ return c.activo !== false; }).length} clientes habilitados
+      </div>
+    </div>
+  );
+}
+
+// ─── TAB CLIENTES VIP (ADMIN) ─────────────────────────────────────────────────
+function TabClientesVip({ data, setData }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [importando, setImportando] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [form, setForm] = useState({ nombre: "", apellido: "", dni: "" });
+
+  var clientes = data.clientesVip || [];
+  var filtrados = busqueda.trim()
+    ? clientes.filter(function(c) {
+        var q = busqueda.toLowerCase();
+        return c.nombre.toLowerCase().includes(q) || c.apellido.toLowerCase().includes(q) || c.dni.includes(q);
+      })
+    : clientes;
+
+  var activos = clientes.filter(function(c){ return c.activo !== false; }).length;
+
+  var guardar = function() {
+    if (!form.nombre.trim() || !form.apellido.trim() || !form.dni.trim()) return;
+    var dniLimpio = form.dni.trim().replace(/\D/g, "");
+    if (editando === "nuevo") {
+      supabase.from('clientes_preferenciales').insert({ nombre: form.nombre.trim(), apellido: form.apellido.trim(), dni: dniLimpio, activo: true }).select().single().then(function(res) {
+        if (res.data) setData(function(prev){ return {...prev, clientesVip: [...(prev.clientesVip||[]), res.data]}; });
+      });
+    } else {
+      supabase.from('clientes_preferenciales').update({ nombre: form.nombre.trim(), apellido: form.apellido.trim(), dni: dniLimpio }).eq('id', editando);
+      setData(function(prev){ return {...prev, clientesVip: prev.clientesVip.map(function(c){ return c.id===editando ? {...c, nombre:form.nombre.trim(), apellido:form.apellido.trim(), dni:dniLimpio} : c; })}; });
+    }
+    setEditando(null);
+  };
+
+  var toggleActivo = function(c) {
+    supabase.from('clientes_preferenciales').update({ activo: !c.activo }).eq('id', c.id);
+    setData(function(prev){ return {...prev, clientesVip: prev.clientesVip.map(function(x){ return x.id===c.id ? {...x, activo:!x.activo} : x; })}; });
+  };
+
+  var eliminar = function(id) {
+    if (!window.confirm("¿Eliminar este cliente del listado VIP?")) return;
+    supabase.from('clientes_preferenciales').delete().eq('id', id);
+    setData(function(prev){ return {...prev, clientesVip: prev.clientesVip.filter(function(c){ return c.id!==id; })}; });
+  };
+
+  var importarExcel = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    setImportando(true);
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var XLSX = window.XLSX;
+        if (!XLSX) { alert("Error: librería Excel no disponible"); setImportando(false); return; }
+        var wb = XLSX.read(ev.target.result, { type: "binary" });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        var nuevos = [];
+        for (var i = 1; i < rows.length; i++) {
+          var row = rows[i];
+          if (!row || row.length < 3) continue;
+          var nombre = String(row[0] || "").trim();
+          var apellido = String(row[1] || "").trim();
+          var dni = String(row[2] || "").trim().replace(/\D/g, "");
+          if (!nombre || !apellido || !dni) continue;
+          nuevos.push({ nombre: nombre, apellido: apellido, dni: dni, activo: true });
+        }
+        if (nuevos.length === 0) { alert("No se encontraron datos válidos. El archivo debe tener columnas: Nombre | Apellido | DNI"); setImportando(false); return; }
+        supabase.from('clientes_preferenciales').insert(nuevos).select().then(function(res) {
+          if (res.data) {
+            setData(function(prev){ return {...prev, clientesVip: [...(prev.clientesVip||[]), ...res.data]}; });
+            alert("✅ Se importaron " + res.data.length + " clientes correctamente.");
+          }
+          setImportando(false);
+        });
+      } catch(err) {
+        alert("Error al leer el archivo: " + err.message);
+        setImportando(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
+
+  var inputStyle = { padding: "9px 12px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none", boxSizing: "border-box", width: "100%" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <SectionTitle>Clientes Preferenciales ⭐</SectionTitle>
+        <div style={{ display: "flex", gap: 8 }}>
+          <label style={{ padding: "10px 18px", borderRadius: 12, border: "2px solid " + C.violetaLight, background: "white", cursor: "pointer", fontWeight: 800, fontSize: 13, fontFamily: "Nunito, sans-serif", color: C.violeta }}>
+            📥 Importar Excel
+            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{ display: "none" }} />
+          </label>
+          <button onClick={function(){ setForm({ nombre: "", apellido: "", dni: "" }); setEditando("nuevo"); }}
+            style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.violeta, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Nunito, sans-serif" }}>
+            + Nuevo cliente
+          </button>
+        </div>
+      </div>
+
+      <div style={{ background: "#fff8e1", borderRadius: 12, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "#b8860b", fontWeight: 600 }}>
+        📋 El Excel debe tener 3 columnas en orden: <strong>Nombre | Apellido | DNI</strong> (con encabezado en la primera fila)
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <Card style={{ flex: 1, minWidth: 120, padding: "12px 16px", borderLeft: "4px solid #27ae60" }}>
+          <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase" }}>Activos</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#27ae60", fontFamily: "Baloo 2, cursive" }}>{activos}</div>
+        </Card>
+        <Card style={{ flex: 1, minWidth: 120, padding: "12px 16px", borderLeft: "4px solid " + C.violeta }}>
+          <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase" }}>Total</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>{clientes.length}</div>
+        </Card>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <input placeholder="🔍 Buscar por nombre, apellido o DNI..." value={busqueda}
+          onChange={function(e){ setBusqueda(e.target.value); }}
+          style={{ ...inputStyle, fontSize: 14 }} />
+      </div>
+
+      {importando && (
+        <div style={{ textAlign: "center", padding: 24, color: C.violeta, fontWeight: 700 }}>⏳ Importando clientes...</div>
+      )}
+
+      {filtrados.length === 0 && !importando ? (
+        <Card style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 48, marginBottom: 10 }}>⭐</div>
+          <p style={{ color: C.violetaLight, fontWeight: 700 }}>
+            {busqueda ? "No se encontraron clientes con esa búsqueda" : "No hay clientes cargados aún"}
+          </p>
+          <p style={{ color: "#aaa", fontSize: 13 }}>Importá un Excel o agregá clientes uno por uno</p>
+        </Card>
+      ) : (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: C.violetaPale }}>
+                {["Apellido", "Nombre", "DNI", "Estado", "Acciones"].map(function(h, i) {
+                  return <th key={i} style={{ padding: "10px 14px", textAlign: i >= 3 ? "center" : "left", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map(function(c, i) {
+                return (
+                  <tr key={c.id} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? "white" : C.crema }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 800, color: c.activo !== false ? C.dark : "#aaa" }}>{c.apellido}</td>
+                    <td style={{ padding: "10px 14px", fontWeight: 600 }}>{c.nombre}</td>
+                    <td style={{ padding: "10px 14px", fontWeight: 700, color: C.violeta, fontFamily: "monospace" }}>{c.dni}</td>
+                    <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                      <button onClick={function(){ toggleActivo(c); }}
+                        style={{ padding: "4px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "Nunito, sans-serif",
+                          background: c.activo !== false ? "#e8f8f1" : "#f5f5f5",
+                          color: c.activo !== false ? "#27ae60" : "#aaa" }}>
+                        {c.activo !== false ? "✅ Activo" : "⏸️ Inactivo"}
+                      </button>
+                    </td>
+                    <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                        <button onClick={function(){ setForm({ nombre: c.nombre, apellido: c.apellido, dni: c.dni }); setEditando(c.id); }}
+                          style={{ padding: "4px 10px", borderRadius: 8, border: "2px solid " + C.violetaLight, background: "white", color: C.violeta, fontWeight: 700, cursor: "pointer", fontSize: 11, fontFamily: "Nunito, sans-serif" }}>
+                          Editar
+                        </button>
+                        <button onClick={function(){ eliminar(c.id); }}
+                          style={{ padding: "4px 10px", borderRadius: 8, border: "2px solid #ffb3b3", background: "white", color: "#e74c3c", fontWeight: 700, cursor: "pointer", fontSize: 11, fontFamily: "Nunito, sans-serif" }}>
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {editando && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(45,21,89,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }}>
+          <Card style={{ maxWidth: 400, width: "100%" }}>
+            <h3 style={{ margin: "0 0 18px", color: C.violeta, fontFamily: "Baloo 2, cursive" }}>
+              {editando === "nuevo" ? "Nuevo cliente preferencial" : "Editar cliente"}
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, color: C.violeta, fontWeight: 800, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Nombre</label>
+                <input value={form.nombre} onChange={function(e){ setForm(function(f){ return {...f, nombre: e.target.value}; }); }} placeholder="Nombre" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: C.violeta, fontWeight: 800, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Apellido</label>
+                <input value={form.apellido} onChange={function(e){ setForm(function(f){ return {...f, apellido: e.target.value}; }); }} placeholder="Apellido" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: C.violeta, fontWeight: 800, display: "block", marginBottom: 5, textTransform: "uppercase" }}>DNI</label>
+                <input value={form.dni} onChange={function(e){ setForm(function(f){ return {...f, dni: e.target.value}; }); }} placeholder="Sin puntos ni espacios" style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button onClick={function(){ setEditando(null); }}
+                style={{ flex: 1, padding: "11px", borderRadius: 12, border: "2px solid " + C.violetaLight, background: "white", cursor: "pointer", fontWeight: 700, fontFamily: "Nunito, sans-serif" }}>
+                Cancelar
+              </button>
+              <button onClick={guardar}
+                style={{ flex: 2, padding: "11px", borderRadius: 12, border: "none", background: C.violeta, color: "white", fontWeight: 800, cursor: "pointer", fontFamily: "Nunito, sans-serif", fontSize: 14 }}>
+                Guardar
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TAB CONFIGURACIÓN (ADMIN) ───────────────────────────────────────────────
 function TabConfiguracion() {
   var getConf = function(key, def) {
@@ -5271,6 +5620,15 @@ export default function App() {
   const [sesion, setSesion] = useState(null);
   const [cajaActiva, setCajaActiva] = useState(null);
   const [cargando, setCargando] = useState(true);
+
+  // Cargar librería XLSX para importar Excel
+  useEffect(function() {
+    if (!window.XLSX) {
+      var script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      document.head.appendChild(script);
+    }
+  }, []);
 
   // Cargar datos desde Supabase al iniciar
   useEffect(function() {
