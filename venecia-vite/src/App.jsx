@@ -140,6 +140,7 @@ async function guardarVenta(venta) {
     caja_id: venta.cajaId,
     fecha: venta.fecha,
     hora: venta.hora,
+    n_comanda: venta.n_comanda || null,
     sucursal_id: venta.sucursal_id,
     usuario_id: venta.usuario_id,
     usuario_nombre: venta.usuario_nombre,
@@ -635,6 +636,11 @@ function TicketModal({ venta, sucursal, usuario, onClose }) {
           <div style={{ marginTop:8, fontSize:12, color:C.violetaMed, fontWeight:600 }}>{sucursal}</div>
           <div style={{ fontSize:11, color:"#aaa", marginTop:2 }}>{fechaLegible(venta.fecha)} · {venta.hora} · {usuario}</div>
           <div style={{ fontSize:11, color:"#bbb" }}>Ticket #{String(venta.id).slice(-5).padStart(5,"0")}</div>
+          {venta.n_comanda && (
+            <div style={{ marginTop:6, background:C.violeta, color:"white", borderRadius:20, padding:"4px 16px", display:"inline-block", fontWeight:900, fontSize:16, letterSpacing:1 }}>
+              🎫 {venta.n_comanda}
+            </div>
+          )}
         </div>
         <table style={{ width:"100%", fontSize:13, borderCollapse:"collapse" }}>
           <thead>
@@ -1127,6 +1133,12 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
 
   const confirmarVenta = () => {
     if (!formaPago) return;
+    // Calcular número de comanda correlativo del día
+    var fechaHoy = hoy(); // YYYY-MM-DD
+    var fechaCompacta = fechaHoy.replace(/-/g, ""); // YYYYMMDD
+    var ventasHoy = (data.ventas || []).filter(function(v) { return v.fecha === fechaHoy && v.sucursal_id === sesion.sucursal.id; });
+    var nCorrelativo = String(ventasHoy.length + 1).padStart(3, "0");
+    var nComanda = fechaCompacta + "-" + nCorrelativo;
     // monto recibido es opcional en efectivo
     // Determinar forma de pago final
     var formaPagoFinal = formaPago;
@@ -1137,6 +1149,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
     }
     const nuevaVenta = {
       id: Date.now(), fecha: hoy(), hora: ahora(),
+      n_comanda: nComanda,
       cajaId: caja.id,
       sucursal_id: sesion.sucursal.id,
       usuario_id: sesion.usuario.id, usuario_nombre: sesion.usuario.nombre,
@@ -1208,6 +1221,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           '<div class="sub">' + nuevaVenta.fecha + ' ' + nuevaVenta.hora + '</div>' +
           '<div class="sub">Atendio: ' + sesion.usuario.nombre + '</div>' +
           '<div class="sub">Ticket #' + String(nuevaVenta.id).slice(-5) + '</div>' +
+          '<div class="sub" style="font-size:14px;font-weight:900;">Comanda: ' + nComanda + '</div>' +
           '<hr>' +
           '<table>' + items + '</table>' +
           '<hr>' +
@@ -1473,6 +1487,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                     var resumen = nombres.length > 28 ? nombres.slice(0, 28) + "…" : nombres;
                     var icono = v.formaPago === "efectivo" ? "Efectivo" : v.formaPago === "tarjeta" ? "Tarjeta" : "QR";
                     var numTicket = "#" + String(v.id).slice(-5).padStart(5, "0");
+                    var numComanda = v.n_comanda || null;
                     var reimprimir = function(e) {
                       e.stopPropagation();
                       var fp = v.formaPago === "efectivo" ? "Efectivo" : v.formaPago === "tarjeta" ? "Tarjeta/Debito" : v.formaPago === "qr" ? "QR/Transferencia" : v.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
@@ -1524,6 +1539,11 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                             <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
                               {v.hora} · {icono}
                             </div>
+                            {numComanda && (
+                              <div style={{ fontSize: 12, color: C.violeta, fontWeight: 900, marginTop: 2 }}>
+                                🎫 {numComanda}
+                              </div>
+                            )}
                             <div style={{ fontSize: 10, color: C.violetaLight, fontWeight: 700, marginTop: 1 }}>
                               {numTicket}
                             </div>
