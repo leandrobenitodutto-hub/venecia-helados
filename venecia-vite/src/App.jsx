@@ -183,20 +183,16 @@ async function guardarCaja(caja) {
 }
 
 async function cerrarCaja(id, horaCierre, usuarioId, sucursalId) {
-  var result = await supabase.from('cajas').update({
+  // Cerrar por id primero
+  await supabase.from('cajas').update({
     hora_cierre: horaCierre,
     cerrada: true,
   }).eq('id', Number(id));
-  console.log('cerrarCaja result:', result, 'id:', id);
-  // Si no actualizó nada, buscar por usuario y sucursal
-  if (result.count === 0 || result.count === null) {
-    console.log('Intentando cerrar por usuario/sucursal...');
-    await supabase.from('cajas').update({
-      hora_cierre: horaCierre,
-      cerrada: true,
-    }).eq('usuario_id', usuarioId).eq('sucursal_id', sucursalId).eq('cerrada', false);
-  }
-  return result;
+  // Además cerrar cualquier caja abierta de esa sucursal por seguridad
+  await supabase.from('cajas').update({
+    hora_cierre: horaCierre,
+    cerrada: true,
+  }).eq('sucursal_id', sucursalId).eq('cerrada', false);
 }
 
 async function guardarRetiro(retiro) {
@@ -1516,6 +1512,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                         '<div class="sub">' + v.fecha + ' ' + v.hora + '</div>' +
                         '<div class="sub">Atendio: ' + (v.usuario_nombre || sesion.usuario.nombre) + '</div>' +
                         '<div class="sub">Ticket ' + numTicket + ' [COPIA]</div>' +
+                        (v.n_comanda ? '<div class="sub" style="font-size:14px;font-weight:900;">Comanda: ' + v.n_comanda + '</div>' : '') +
                         '<hr>' +
                         '<table>' + itemsHTML + '</table>' +
                         '<hr>' +
