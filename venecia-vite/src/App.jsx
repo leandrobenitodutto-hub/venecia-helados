@@ -857,10 +857,10 @@ function TicketCierre({ caja, sucursal, onClose }) {
 function AperturaCaja({ sesion, onAbrir, data }) {
   const [monto, setMonto] = useState("");
 
-  // Verificar si hay otra caja abierta en esta sucursal (de otro usuario)
-  var cajaOtraPersona = data.cajas.find(function(c) {
-    return (c.cerrada === false || c.cerrada === null || c.cerrada === 0) 
-      && c.sucursal_id === sesion.sucursal.id 
+  // Verificar si hay otra caja abierta en esta sucursal (datos frescos desde Supabase vía data)
+  var cajaOtraPersona = (data.cajas || []).find(function(c) {
+    return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
+      && c.sucursal_id === sesion.sucursal.id
       && c.usuario_id !== sesion.usuario.id;
   });
 
@@ -5682,68 +5682,100 @@ export default function App() {
 
   const handleLogin = async function(s) {
     setSesion(s);
-    // Recargar datos frescos de Supabase para tener el estado real de cajas
+    // Siempre cargar datos frescos al loguearse
     var datosActuales = await cargarDatos();
     setData(datosActuales);
-    // Buscar si hay caja abierta para este usuario en esta sucursal
-    var cajaExistente = datosActuales.cajas.find(function(c) {
-      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
-        && c.usuario_id === s.usuario.id 
-        && c.sucursal_id === s.sucursal.id;
-    });
-    if (cajaExistente) {
-      setCajaActiva({
-        id: cajaExistente.id,
-        usuarioId: cajaExistente.usuario_id,
-        usuarioNombre: cajaExistente.usuario_nombre,
-        sucursalId: cajaExistente.sucursal_id,
-        sucursalNombre: cajaExistente.sucursal_nombre,
-        fecha: cajaExistente.fecha,
-        horaApertura: cajaExistente.hora_apertura,
-        montoInicial: cajaExistente.monto_inicial || 0,
-        cerrada: false,
+    // Buscar caja abierta para este usuario en esta sucursal
+    if (s.usuario.rol !== "admin") {
+      var cajaExistente = datosActuales.cajas.find(function(c) {
+        return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
+          && c.usuario_id === s.usuario.id
+          && c.sucursal_id === s.sucursal.id;
       });
-    } else {
-      setCajaActiva(null);
+      if (cajaExistente) {
+        setCajaActiva({
+          id: cajaExistente.id,
+          usuarioId: cajaExistente.usuario_id,
+          usuarioNombre: cajaExistente.usuario_nombre,
+          sucursalId: cajaExistente.sucursal_id,
+          sucursalNombre: cajaExistente.sucursal_nombre,
+          fecha: cajaExistente.fecha,
+          horaApertura: cajaExistente.hora_apertura,
+          montoInicial: cajaExistente.monto_inicial || 0,
+          cerrada: false,
+        });
+      } else {
+        setCajaActiva(null);
+      }
     }
   };
 
-const handleAbrirCaja = async function(montoInicial) {
-    var yaExiste = data.cajas.find(function(c) {
+  const handleAbrirCaja = async function(montoInicial) {
+    // Recargar datos frescos antes de abrir
+    var datosActuales = await cargarDatos();
+    setData(datosActuales);
+
+    // Verificar si ya tiene una caja abierta (datos frescos)
+    var yaExiste = datosActuales.cajas.find(function(c) {
       return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
-        && (c.usuario_id === sesion.usuario.id || c.usuarioId === sesion.usuario.id)
-        && (c.sucursal_id === sesion.sucursal.id || c.sucursalId === sesion.sucursal.id);
+        && c.usuario_id === sesion.usuario.id
+        && c.sucursal_id === sesion.sucursal.id;
     });
     if (yaExiste) {
       setCajaActiva({
         id: yaExiste.id,
-        usuarioId: yaExiste.usuario_id || yaExiste.usuarioId,
-        usuarioNombre: yaExiste.usuario_nombre || yaExiste.usuarioNombre,
-        sucursalId: yaExiste.sucursal_id || yaExiste.sucursalId,
-        sucursalNombre: yaExiste.sucursal_nombre || yaExiste.sucursalNombre,
+        usuarioId: yaExiste.usuario_id,
+        usuarioNombre: yaExiste.usuario_nombre,
+        sucursalId: yaExiste.sucursal_id,
+        sucursalNombre: yaExiste.sucursal_nombre,
         fecha: yaExiste.fecha,
-        horaApertura: yaExiste.hora_apertura || yaExiste.horaApertura,
-        montoInicial: yaExiste.monto_inicial || yaExiste.montoInicial || 0,
+        horaApertura: yaExiste.hora_apertura,
+        montoInicial: yaExiste.monto_inicial || 0,
         cerrada: false,
       });
       return;
     }
-    var nuevaCaja = {
-      id: Date.now(),
-      usuarioId: sesion.usuario.id,
-      usuarioNombre: sesion.usuario.nombre,
-      sucursalId: sesion.sucursal.id,
-      sucursalNombre: sesion.sucursal.nombre,
+
+    // Verificar si hay otra caja abierta en la misma sucursal
+    var otraCaja = datosActuales.cajas.find(function(c) {
+      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
+        && c.sucursal_id === sesion.sucursal.id
+        && c.usuario_id !== sesion.usuario.id;
+    });
+    if (otraCaja) {
+      alert("Hay una caja abierta por " + otraCaja.usuario_nombre + ". Pedile que cierre su caja primero.");
+      return;
+    }
+
+    // Crear nueva caja — sin pasar id, que Supabase genere uno
+    var nuevaCajaData = {
+      usuario_id: sesion.usuario.id,
+      usuario_nombre: sesion.usuario.nombre,
+      sucursal_id: sesion.sucursal.id,
+      sucursal_nombre: sesion.sucursal.nombre,
       fecha: hoy(),
-      horaApertura: ahora(),
-      horaCierre: null,
-      montoInicial,
+      hora_apertura: ahora(),
+      hora_cierre: null,
+      monto_inicial: montoInicial || 0,
       cerrada: false,
     };
-    console.log('Abriendo caja con id:', nuevaCaja.id);
-    await guardarCaja(nuevaCaja);
-    setData(function(prev) { return { ...prev, cajas: [...prev.cajas, { ...nuevaCaja, sucursal_id: nuevaCaja.sucursalId, hora_apertura: nuevaCaja.horaApertura }] }; });
-    setCajaActiva(nuevaCaja);
+    var res = await supabase.from('cajas').insert(nuevaCajaData).select().single();
+    if (res.data) {
+      var cj = res.data;
+      var nuevaCaja = {
+        id: cj.id,
+        usuarioId: cj.usuario_id,
+        usuarioNombre: cj.usuario_nombre,
+        sucursalId: cj.sucursal_id,
+        sucursalNombre: cj.sucursal_nombre,
+        fecha: cj.fecha,
+        horaApertura: cj.hora_apertura,
+        montoInicial: cj.monto_inicial || 0,
+        cerrada: false,
+      };
+      setData(function(prev) { return { ...prev, cajas: [...prev.cajas, cj] }; });
+      setCajaActiva(nuevaCaja);
+    }
   };
 
   const handleCerrarCaja = function() {
