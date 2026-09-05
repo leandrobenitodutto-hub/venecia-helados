@@ -4688,6 +4688,31 @@ function TabProductos({ data, setData }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <SectionTitle>Productos</SectionTitle>
         <div style={{ display:"flex", gap:8 }}>
+          <button onClick={() => {
+              var XLSX = window.XLSX;
+              if (!XLSX) { alert("Error: librería Excel no disponible. Recargá la página e intentá de nuevo."); return; }
+              var filas = productosConCosto.map(function(p) {
+                var margen = p.precio > 0 ? ((p.precio - p.costoReal) / p.precio) * 100 : 0;
+                return {
+                  "Producto": p.nombre,
+                  "Categoría": (categorias.find(function(c){ return c.key === p.categoria; }) || {}).label || p.categoria,
+                  "Precio": p.precio,
+                  "Costo": Math.round(p.costoReal),
+                  "Ganancia": Math.round(p.precio - p.costoReal),
+                  "Margen %": Math.round(margen * 10) / 10,
+                  "Activo": p.activo !== false ? "Sí" : "No",
+                };
+              });
+              var ws = XLSX.utils.json_to_sheet(filas);
+              ws["!cols"] = [{ wch: 26 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }];
+              var wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Productos");
+              var fecha = new Date().toISOString().slice(0, 10);
+              XLSX.writeFile(wb, "productos_venecia_" + fecha + ".xlsx");
+            }}
+            style={{ padding: "10px 20px", borderRadius: 12, border: `2px solid ${C.violeta}`, background: "white", color: C.violeta, fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Nunito, sans-serif" }}>
+            📤 Exportar Excel
+          </button>
           <button onClick={() => abrirForm()} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.violeta, color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Nunito, sans-serif", boxShadow: `0 4px 14px rgba(91,45,142,0.35)` }}>
           + Nuevo producto
         </button>
