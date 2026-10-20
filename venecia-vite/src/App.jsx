@@ -501,7 +501,9 @@ const INITIAL_DATA = {
 };
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-const fmt = (n) => `$${Number(n).toLocaleString("es-AR")}`;
+const fmt = (n) => `$${Number(n).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
+// Con decimales: solo para Productos e Insumos (costos unitarios)
+const fmtDec = (n) => `$${Number(n).toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
 
 // ─── CATEGORÍAS DE PRODUCTOS ──────────────────────────────────────────────────
 const CATEGORIAS_DEFAULT = [
@@ -1193,11 +1195,11 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       if (nuevaVenta) {
         var fp = nuevaVenta.formaPago === "efectivo" ? "Efectivo" : nuevaVenta.formaPago === "tarjeta" ? "Tarjeta/Debito" : nuevaVenta.formaPago === "qr" ? "QR/Transferencia" : nuevaVenta.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
         var items = nuevaVenta.items.map(function(it) {
-          return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">' + '$' + Number(it.subtotal).toLocaleString('es-AR') + '</td></tr>';
+          return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">' + '$' + Number(it.subtotal).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr>';
         }).join('');
         var pagosMixtos = nuevaVenta.pagosMixtos ? nuevaVenta.pagosMixtos.map(function(p) {
           var lb = {efectivo:'Efectivo', tarjeta:'Tarjeta', qr:'QR'};
-          return '<tr><td>' + (lb[p.medio]||p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR') + '</td></tr>';
+          return '<tr><td>' + (lb[p.medio]||p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr>';
         }).join('') : '';
         var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
           'html,body{margin:0;padding:0;}' +
@@ -1221,10 +1223,10 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
           '<hr>' +
           '<table>' + items + '</table>' +
           '<hr>' +
-          (descuento > 0 ? '<table><tr><td>Subtotal</td><td align="right">$' + Number(totalBruto).toLocaleString('es-AR') + '</td></tr><tr><td>Descuento ' + descuento + '%</td><td align="right">-$' + Number(montoDescuento).toLocaleString('es-AR') + '</td></tr></table>' : '') +
-          '<div class="total">TOTAL: $' + Number(nuevaVenta.total).toLocaleString('es-AR') + '</div>' +
+          (descuento > 0 ? '<table><tr><td>Subtotal</td><td align="right">$' + Number(totalBruto).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr><tr><td>Descuento ' + descuento + '%</td><td align="right">-$' + Number(montoDescuento).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr></table>' : '') +
+          '<div class="total">TOTAL: $' + Number(nuevaVenta.total).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</div>' +
           '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
-          (nuevaVenta.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(nuevaVenta.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
+          (nuevaVenta.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(nuevaVenta.vuelto).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr></table>' : '') +
           '<hr><div class="sub">Gracias por su visita!</div>' +
           '<div class="cut"></div>' +
           '</body></html>';
@@ -1288,7 +1290,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       var retirosC = (data.retiros||[]).filter(function(r){return r.cajaId===caja.id;});
       var totalRet = retirosC.reduce(function(s,r){return s+r.monto;},0);
       var efFisico = ef - totalRet + (caja.montoInicial||0);
-      var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR'); };
+      var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 }); };
       var filasRetiros = retirosC.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
         'html,body{margin:0;padding:0;}' +
@@ -1488,11 +1490,11 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                       e.stopPropagation();
                       var fp = v.formaPago === "efectivo" ? "Efectivo" : v.formaPago === "tarjeta" ? "Tarjeta/Debito" : v.formaPago === "qr" ? "QR/Transferencia" : v.formaPago === "consumo" ? "Consumo empleado" : "Pago mixto";
                       var itemsHTML = v.items.map(function(it) {
-                        return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">$' + Number(it.subtotal).toLocaleString('es-AR') + '</td></tr>';
+                        return '<tr><td>' + it.nombre + ' x' + it.cantidad + '</td><td align="right">$' + Number(it.subtotal).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr>';
                       }).join('');
                       var pagosMixtos = v.pagosMixtos ? v.pagosMixtos.map(function(p) {
                         var lb = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', qr: 'QR' };
-                        return '<tr><td>' + (lb[p.medio] || p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR') + '</td></tr>';
+                        return '<tr><td>' + (lb[p.medio] || p.medio) + '</td><td align="right">$' + Number(p.monto).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr>';
                       }).join('') : '';
                       var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
                         'html,body{margin:0;padding:0;}' +
@@ -1516,9 +1518,9 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                         '<hr>' +
                         '<table>' + itemsHTML + '</table>' +
                         '<hr>' +
-                        '<div class="total">TOTAL: $' + Number(v.total).toLocaleString('es-AR') + '</div>' +
+                        '<div class="total">TOTAL: $' + Number(v.total).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</div>' +
                         '<table><tr><td>Forma de pago:</td><td align="right">' + fp + '</td></tr>' + pagosMixtos + '</table>' +
-                        (v.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(v.vuelto).toLocaleString('es-AR') + '</td></tr></table>' : '') +
+                        (v.vuelto > 0 ? '<table><tr><td>Vuelto:</td><td align="right">$' + Number(v.vuelto).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + '</td></tr></table>' : '') +
                         '<hr><div class="sub">Gracias por su visita!</div>' +
                         '<div class="cut"></div>' +
                         '</body></html>';
@@ -1902,7 +1904,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
                   var retirosCorte = (data.retiros||[]).filter(function(r){return r.cajaId===caja.id;});
                   var totalRet = retirosCorte.reduce(function(s,r){return s+r.monto;},0);
                   var efFisicoCorte = efectivoCorte - totalRet + (caja.montoInicial||0);
-                  var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR'); };
+                  var fmt2 = function(n){ return '$'+Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 }); };
                   var filasRetiros = retirosCorte.map(function(r){ return '<tr><td>Retiro: '+r.motivo+'</td><td align="right">('+fmt2(r.monto)+')</td></tr>'; }).join('');
                   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
                     'html,body{margin:0;padding:0;}' +
@@ -2326,7 +2328,7 @@ function Dashboard({ data }) {
   const totalPeriodo   = brutoPeriodo;
   const costoPeriodo   = ventasFiltradas.reduce((s,v) => s + v.costo_total, 0);
   const gananciaPeriodo = brutoPeriodo - costoPeriodo;
-  const margenPeriodo  = brutoPeriodo > 0 ? ((gananciaPeriodo/brutoPeriodo)*100).toFixed(1) : 0;
+  const margenPeriodo  = brutoPeriodo > 0 ? ((gananciaPeriodo/brutoPeriodo)*100).toFixed(0) : 0;
 
   // Período anterior (mismo rango de días, hacia atrás)
   const diasPeriodo = Math.max(1, (new Date(hasta) - new Date(desde)) / 86400000 + 1);
@@ -2340,7 +2342,7 @@ function Dashboard({ data }) {
   const ticketAnt = ventasAnt.length > 0 ? Math.round(brutoAnt / ventasAnt.length) : 0;
   const variacion = (actual, anterior) => {
     if (anterior === 0) return null;
-    const pct = ((actual - anterior) / anterior * 100).toFixed(1);
+    const pct = ((actual - anterior) / anterior * 100).toFixed(0);
     return { pct, sube: actual >= anterior };
   };
   const varTotal    = variacion(brutoPeriodo, brutoAnt);
@@ -3222,7 +3224,7 @@ function TabResultados({ data }) {
   const ingresos = ventasFiltradas.reduce((s, v) => s + v.total, 0);
   const costos = ventasFiltradas.reduce((s, v) => s + v.costo_total, 0);
   const ganancia = ingresos - costos;
-  const margen = ingresos > 0 ? ((ganancia / ingresos) * 100).toFixed(1) : 0;
+  const margen = ingresos > 0 ? ((ganancia / ingresos) * 100).toFixed(0) : 0;
 
   const porProducto = {};
   let totalKgVendidos = 0;
@@ -3635,7 +3637,7 @@ function PuntoDeEquilibrio({ data }) {
           <Card style={{ padding: "12px 16px" }}>
             <div style={{ fontSize: 11, color: "#aaa", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Margen últimos 30 días</div>
             <div style={{ fontSize: 26, fontWeight: 900, color: current.margen > 0 ? "#27ae60" : "#e74c3c", fontFamily: "Baloo 2, cursive" }}>
-              {(current.margen * 100).toFixed(1)}%
+              {(current.margen * 100).toFixed(0)}%
             </div>
             <div style={{ fontSize: 11, color: "#aaa" }}>{tab === "global" ? "Todas las sucursales" : (sucursales.find(function(s){ return s.id === tab; }) || {}).nombre}</div>
           </Card>
@@ -3644,7 +3646,7 @@ function PuntoDeEquilibrio({ data }) {
             {current.pe > 0 ? (
               <>
                 <div style={{ fontSize: 24, fontWeight: 900, color: "#e74c3c", fontFamily: "Baloo 2, cursive" }}>{fmt(Math.round(current.pe))}</div>
-                <div style={{ fontSize: 11, color: "#aaa" }}>{fmt(current.cf)} ÷ {(current.margen*100).toFixed(1)}%</div>
+                <div style={{ fontSize: 11, color: "#aaa" }}>{fmt(current.cf)} ÷ {(current.margen*100).toFixed(0)}%</div>
               </>
             ) : (
               <div style={{ fontSize: 13, color: "#ccc", fontWeight: 700 }}>Cargá costos fijos para calcular</div>
@@ -3670,7 +3672,7 @@ function PuntoDeEquilibrio({ data }) {
             <div style={{ fontSize: 13, fontWeight: 800, color: colorProgreso }}>{fmt(current.totalMes)} de {fmt(Math.round(current.pe))}</div>
           </div>
           <div style={{ background: C.violetaPale, borderRadius: 12, height: 26, marginBottom: 10, overflow: "hidden" }}>
-            <div style={{ width: (current.progreso * 100).toFixed(1) + "%", height: "100%", background: colorProgreso, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, transition: "width 0.6s" }}>
+            <div style={{ width: (current.progreso * 100).toFixed(0) + "%", height: "100%", background: colorProgreso, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, transition: "width 0.6s" }}>
               {current.progreso > 0.15 && <span style={{ color: "white", fontWeight: 900, fontSize: 12 }}>{(current.progreso*100).toFixed(0)}%</span>}
             </div>
           </div>
@@ -3725,26 +3727,38 @@ const ATAJOS_REPORTE = [
 ];
 
 function BarrasSimple({ items, color, formato }) {
+  const [sel, setSel] = useState(null);
   const W = 560, H = 170, PL = 8, PR = 8, PT = 16, PB = 26;
   const max = Math.max.apply(null, items.map(function(i) { return i.value; }).concat([1]));
+  const total = items.reduce(function(s, i) { return s + i.value; }, 0);
   const bw = (W - PL - PR) / Math.max(items.length, 1);
   const paso = Math.max(1, Math.ceil(items.length / 12));
   const f = formato || function(v) { return String(v); };
+  const it0 = sel !== null && items[sel] ? items[sel] : null;
   return (
-    <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
-      <text x={PL} y={10} fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">{"máx " + f(max)}</text>
-      {items.map(function(it, i) {
-        const h = (it.value / max) * (H - PT - PB);
-        const x = PL + i * bw;
-        return (
-          <g key={i}>
-            <title>{it.label + ": " + f(it.value)}</title>
-            <rect x={x + bw * 0.12} y={H - PB - h} width={bw * 0.76} height={Math.max(h, it.value > 0 ? 1 : 0)} fill={color} rx="2" />
-            {i % paso === 0 && <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="#999" fontFamily="Nunito, sans-serif">{it.label}</text>}
-          </g>
-        );
-      })}
-    </svg>
+    <div>
+      <div style={{ minHeight: 22, marginBottom: 4, fontSize: 13, fontWeight: 800, color: color }}>
+        {it0
+          ? <span>{it0.label}: {f(it0.value)}{total > 0 && <span style={{ color: "#999", fontWeight: 700 }}> · {((it0.value / total) * 100).toFixed(0)}% del total</span>}</span>
+          : <span style={{ color: "#bbb", fontWeight: 600, fontSize: 12 }}>Tocá una barra para ver su valor</span>}
+      </div>
+      <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
+        <text x={PL} y={10} fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">{"máx " + f(max)}</text>
+        {items.map(function(it, i) {
+          const h = (it.value / max) * (H - PT - PB);
+          const x = PL + i * bw;
+          const activa = sel === i;
+          return (
+            <g key={i} onClick={function() { setSel(activa ? null : i); }} style={{ cursor: "pointer" }}>
+              <title>{it.label + ": " + f(it.value)}</title>
+              <rect x={x} y={PT} width={bw} height={H - PT - PB} fill={activa ? color : "transparent"} opacity="0.08" />
+              <rect x={x + bw * 0.12} y={H - PB - h} width={bw * 0.76} height={Math.max(h, it.value > 0 ? 1 : 0)} fill={color} opacity={sel === null || activa ? 1 : 0.45} rx="2" />
+              {i % paso === 0 && <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="#999" fontFamily="Nunito, sans-serif">{it.label}</text>}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -3863,7 +3877,7 @@ function TabReportes({ data }) {
   const variacion = function(act, prev) {
     if (!prev) return null;
     const p = ((act - prev) / prev) * 100;
-    return { sube: p >= 0, pct: Math.abs(p).toFixed(1) };
+    return { sube: p >= 0, pct: Math.abs(p).toFixed(0) };
   };
 
   // productos
@@ -3935,6 +3949,24 @@ function TabReportes({ data }) {
     const mn = Math.min.apply(null, hs), mx = Math.max.apply(null, hs);
     const out = [];
     for (let h = mn; h <= mx; h++) out.push({ label: h + "h", value: tot[h] || 0 });
+    return out;
+  })();
+
+  // tabla hora por hora (total y por sucursal)
+  const tablaHora = (function() {
+    const mapa = {};
+    ventas.forEach(function(v) {
+      const h = parseInt(String(v.hora || "").slice(0, 2), 10);
+      if (isNaN(h)) return;
+      if (!mapa[h]) mapa[h] = { hora: h, tickets: 0, ventas: 0, porSuc: {} };
+      mapa[h].tickets++;
+      mapa[h].ventas += v.total;
+      mapa[h].porSuc[v.sucursal_id] = (mapa[h].porSuc[v.sucursal_id] || 0) + v.total;
+    });
+    const hs = Object.keys(mapa).map(Number);
+    if (hs.length === 0) return [];
+    const out = [];
+    for (let h = Math.min.apply(null, hs); h <= Math.max.apply(null, hs); h++) out.push(mapa[h] || { hora: h, tickets: 0, ventas: 0, porSuc: {} });
     return out;
   })();
 
@@ -4057,9 +4089,9 @@ function TabReportes({ data }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
             <StatCard label="Ventas" value={fmt(Math.round(K.ingresos))} sub={K.tickets + " tickets"} color="#2980b9" icon="💰" variacion={variacion(K.ingresos, KP.ingresos)} />
             <StatCard label="Costo de ventas" value={fmt(Math.round(K.costos))} sub="Costo de lo vendido" color="#e74c3c" icon="🧾" variacion={null} />
-            <StatCard label="Ganancia bruta" value={fmt(Math.round(K.ganancia))} sub={"Margen " + (K.margen * 100).toFixed(1) + "%"} color="#27ae60" icon="📈" variacion={variacion(K.ganancia, KP.ganancia)} />
+            <StatCard label="Ganancia bruta" value={fmt(Math.round(K.ganancia))} sub={"Margen " + (K.margen * 100).toFixed(0) + "%"} color="#27ae60" icon="📈" variacion={variacion(K.ganancia, KP.ganancia)} />
             <StatCard label="Ticket promedio" value={fmt(Math.round(K.ticketProm))} sub={K.tickets + " ventas"} color={C.violeta} icon="🎟️" variacion={variacion(K.ticketProm, KP.ticketProm)} />
-            <StatCard label="Tickets" value={K.tickets} sub={"Ø " + (K.tickets / largo).toFixed(1) + " por día"} color="#e67e22" icon="🧮" variacion={variacion(K.tickets, KP.tickets)} />
+            <StatCard label="Tickets" value={K.tickets} sub={"Ø " + (K.tickets / largo).toFixed(0) + " por día"} color="#e67e22" icon="🧮" variacion={variacion(K.tickets, KP.tickets)} />
             {totalKg > 0 && <StatCard label="Kg vendidos" value={totalKg.toFixed(2) + " kg"} sub="Helado vendido" color="#7d3c98" icon="⚖️" variacion={null} />}
             {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub={"Después de " + fmt(Math.round(cfScope.total)) + " de costos fijos"} color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
           </div>
@@ -4129,7 +4161,7 @@ function TabReportes({ data }) {
                         <td style={tdN}>{k.tickets}</td>
                         <td style={tdN}>{fmt(Math.round(k.ticketProm))}</td>
                         <td style={Object.assign({}, tdN, { color: "#27ae60", fontWeight: 800 })}>{fmt(Math.round(k.ganancia))}</td>
-                        <td style={tdN}>{(k.margen * 100).toFixed(1)}%</td>
+                        <td style={tdN}>{(k.margen * 100).toFixed(0)}%</td>
                       </tr>
                     );
                   })}
@@ -4152,6 +4184,45 @@ function TabReportes({ data }) {
               {serieHora.length > 0 ? <BarrasSimple items={serieHora} color="#27ae60" formato={function(v) { return fmt(Math.round(v)); }} /> : <div style={{ color: "#bbb", fontSize: 13 }}>Sin datos</div>}
             </Card>
           </div>
+
+          {tablaHora.length > 0 && (
+            <Card style={{ padding: 0, overflow: "hidden", marginTop: 16 }}>
+              <div style={{ padding: "14px 20px", background: C.violetaPale }}>
+                <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>🕐 Ventas hora por hora</h4>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
+                <thead>
+                  <tr style={{ background: C.crema }}>
+                    {["Hora", "Tickets", "Ventas", "% del total", "Ticket prom."].concat(!sucFiltro && sucursales.length > 1 ? sucursales.map(function(s) { return s.nombre; }) : []).map(function(h, i) {
+                      return <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tablaHora.map(function(r, i) {
+                    return (
+                      <tr key={r.hora} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 800 }}>{String(r.hora).padStart(2, "0")}:00 – {String(r.hora).padStart(2, "0")}:59</td>
+                        <td style={tdN}>{r.tickets}</td>
+                        <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(r.ventas))}</td>
+                        <td style={tdN}>{K.ingresos > 0 ? ((r.ventas / K.ingresos) * 100).toFixed(0) : 0}%</td>
+                        <td style={tdN}>{r.tickets > 0 ? fmt(Math.round(r.ventas / r.tickets)) : "—"}</td>
+                        {!sucFiltro && sucursales.length > 1 && sucursales.map(function(s) { return <td key={s.id} style={tdN}>{fmt(Math.round(r.porSuc[s.id] || 0))}</td>; })}
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ background: C.violetaPale, fontWeight: 900 }}>
+                    <td style={{ padding: "10px 14px", color: C.violeta }}>TOTAL</td>
+                    <td style={Object.assign({}, tdN, { color: C.violeta })}>{K.tickets}</td>
+                    <td style={Object.assign({}, tdN, { color: "#2980b9" })}>{fmt(Math.round(K.ingresos))}</td>
+                    <td style={Object.assign({}, tdN, { color: C.violeta })}>100%</td>
+                    <td style={Object.assign({}, tdN, { color: C.violeta })}>{fmt(Math.round(K.ticketProm))}</td>
+                    {!sucFiltro && sucursales.length > 1 && sucursales.map(function(s) { return <td key={s.id} style={Object.assign({}, tdN, { color: C.violeta })}>{fmt(Math.round(tablaHora.reduce(function(a, r) { return a + (r.porSuc[s.id] || 0); }, 0)))}</td>; })}
+                  </tr>
+                </tbody>
+              </table>
+            </Card>
+          )}
         </div>
       )}
 
@@ -4185,7 +4256,7 @@ function TabReportes({ data }) {
                       <td style={{ padding: "10px 14px", fontWeight: 800, color: C.dark }}>{p.nombre}</td>
                       <td style={Object.assign({}, tdN, { fontWeight: 700 })}>{p.cantidad}</td>
                       <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(p.ingresos))}</td>
-                      <td style={Object.assign({}, tdN, { color: "#888" })}>{K.ingresos > 0 ? ((p.ingresos / K.ingresos) * 100).toFixed(1) : 0}%</td>
+                      <td style={Object.assign({}, tdN, { color: "#888" })}>{K.ingresos > 0 ? ((p.ingresos / K.ingresos) * 100).toFixed(0) : 0}%</td>
                       <td style={Object.assign({}, tdN, { color: "#e74c3c", fontWeight: 700 })}>{fmt(Math.round(p.costos))}</td>
                       <td style={Object.assign({}, tdN, { color: "#27ae60", fontWeight: 900 })}>{fmt(Math.round(gan))}</td>
                       <td style={tdN}>
@@ -4273,7 +4344,7 @@ function TabReportes({ data }) {
                     <tr key={f.nombre} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
                       <td style={{ padding: "10px 14px", fontWeight: 800 }}>📍 {f.nombre}</td>
                       <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(f.ingresos))}</td>
-                      <td style={tdN}>{(f.margen * 100).toFixed(1)}%</td>
+                      <td style={tdN}>{(f.margen * 100).toFixed(0)}%</td>
                       <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(f.cf))}</td>
                       <td style={Object.assign({}, tdN, { fontWeight: 800 })}>{f.pe > 0 ? fmt(Math.round(f.pe)) : "—"}</td>
                       <td style={Object.assign({}, tdN, { fontWeight: 800, color: cob === null ? "#bbb" : cob >= 100 ? "#27ae60" : cob >= 70 ? "#e67e22" : "#e74c3c" })}>{cob === null ? "—" : cob.toFixed(0) + "%"}</td>
@@ -4293,7 +4364,7 @@ function TabReportes({ data }) {
                 <tr style={{ background: C.violetaPale, fontWeight: 900 }}>
                   <td style={{ padding: "10px 14px", color: C.violeta }}>TOTAL</td>
                   <td style={Object.assign({}, tdN, { color: "#2980b9" })}>{fmt(Math.round(kTodas.ingresos))}</td>
-                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{(kTodas.margen * 100).toFixed(1)}%</td>
+                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{(kTodas.margen * 100).toFixed(0)}%</td>
                   <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(cfTotalTodas))}</td>
                   <td style={Object.assign({}, tdN, { color: C.violeta })}>{peTodas > 0 ? fmt(Math.round(peTodas)) : "—"}</td>
                   <td style={Object.assign({}, tdN, { color: C.violeta })}>{peTodas > 0 ? ((kTodas.ingresos / peTodas) * 100).toFixed(0) + "%" : "—"}</td>
@@ -4305,9 +4376,9 @@ function TabReportes({ data }) {
 
           {/* Detalle del alcance elegido en el filtro */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <StatCard label="Margen del período" value={(margenScope * 100).toFixed(1) + "%"} sub={nombreScope} color="#27ae60" icon="📈" variacion={null} />
+            <StatCard label="Margen del período" value={(margenScope * 100).toFixed(0) + "%"} sub={nombreScope} color="#27ae60" icon="📈" variacion={null} />
             <StatCard label="Costo fijo del período" value={fmt(Math.round(cfScope.total))} sub={enCurso ? "Mes completo" : "Prorrateado por días"} color="#e74c3c" icon="📋" variacion={null} />
-            <StatCard label="Punto de equilibrio" value={peScope > 0 ? fmt(Math.round(peScope)) : "—"} sub={peScope > 0 ? fmt(Math.round(cfScope.total)) + " ÷ " + (margenScope * 100).toFixed(1) + "%" : "Cargá costos fijos"} color={C.violeta} icon="⚖️" variacion={null} />
+            <StatCard label="Punto de equilibrio" value={peScope > 0 ? fmt(Math.round(peScope)) : "—"} sub={peScope > 0 ? fmt(Math.round(cfScope.total)) + " ÷ " + (margenScope * 100).toFixed(0) + "%" : "Cargá costos fijos"} color={C.violeta} icon="⚖️" variacion={null} />
             {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub="Ganancia bruta − costos fijos" color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
           </div>
           {cfScope.hereda && <div style={{ fontSize: 11, color: "#b8860b", fontWeight: 700, marginBottom: 12 }}>↺ Algún mes del período no tiene costo fijo cargado: se usó el del último mes cargado.</div>}
@@ -4319,7 +4390,7 @@ function TabReportes({ data }) {
                 <div style={{ fontSize: 13, fontWeight: 800, color: colorProg }}>{fmt(Math.round(K.ingresos))} de {fmt(Math.round(peScope))}</div>
               </div>
               <div style={{ background: C.violetaPale, borderRadius: 12, height: 26, marginBottom: 10, overflow: "hidden" }}>
-                <div style={{ width: (progreso * 100).toFixed(1) + "%", height: "100%", background: colorProg, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10 }}>
+                <div style={{ width: (progreso * 100).toFixed(0) + "%", height: "100%", background: colorProg, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10 }}>
                   {progreso > 0.15 && <span style={{ color: "white", fontWeight: 900, fontSize: 12 }}>{(progreso * 100).toFixed(0)}%</span>}
                 </div>
               </div>
@@ -4715,7 +4786,7 @@ function TabInsumos({ data, setData }) {
               return (
                 <tr key={ins.id} style={{ borderTop: `1px solid ${C.violetaPale}`, background: i % 2 === 0 ? C.blanco : C.crema }}>
                   <td style={{ padding: "10px 14px", fontWeight: 700 }}>{ins.nombre}</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 900, color: "#e74c3c" }}>{fmt(ins.costo)}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 900, color: "#e74c3c" }}>{fmtDec(ins.costo)}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 12, color: "#888" }}>
                     {usadoEn.length > 0 ? <span style={{ color: C.violeta, fontWeight: 700 }}>{usadoEn.length} producto{usadoEn.length > 1 ? "s" : ""}</span> : "—"}
                   </td>
@@ -5623,11 +5694,11 @@ function TabProductos({ data, setData }) {
                     <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 10, color: "#aaa", fontWeight: 700, textTransform: "uppercase" }}>Precio</div>
-                        <div style={{ fontWeight: 900, color: "#2980b9", fontSize: 14 }}>{fmt(p.precio)}</div>
+                        <div style={{ fontWeight: 900, color: "#2980b9", fontSize: 14 }}>{fmtDec(p.precio)}</div>
                       </div>
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 10, color: "#aaa", fontWeight: 700, textTransform: "uppercase" }}>Costo</div>
-                        <div style={{ fontWeight: 800, color: "#e74c3c", fontSize: 14 }}>{fmt(p.costoReal)}</div>
+                        <div style={{ fontWeight: 800, color: "#e74c3c", fontSize: 14 }}>{fmtDec(p.costoReal)}</div>
                         {p.tipoCosto === "receta" && <div style={{ fontSize: 9, color: "#aaa" }}>auto</div>}
                       </div>
                       <div style={{ textAlign: "center" }}>
@@ -5695,13 +5766,13 @@ function TabProductos({ data, setData }) {
                         <td style={{ padding:"9px 12px", fontWeight:700 }}>{fechaLegible(h.fecha)}</td>
                         <td style={{ padding:"9px 12px", color:"#888" }}>{h.hora}</td>
                         <td style={{ padding:"9px 12px", fontWeight:800, color:C.violeta }}>{h.productoNombre}</td>
-                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmt(h.precioAnterior)}</td>
-                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmt(h.precioNuevo)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmtDec(h.precioAnterior)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmtDec(h.precioNuevo)}</td>
                         <td style={{ padding:"9px 12px", textAlign:"right" }}>
                           {varPrecio && <span style={{ fontSize:11, fontWeight:800, color: Number(varPrecio)>=0?"#27ae60":"#e74c3c", background: Number(varPrecio)>=0?"#eafaf1":"#fdecea", borderRadius:6, padding:"2px 6px" }}>{Number(varPrecio)>=0?"▲":"▼"} {Math.abs(varPrecio)}%</span>}
                         </td>
-                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmt(h.costoAnterior)}</td>
-                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmt(h.costoNuevo)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", color:"#888" }}>{fmtDec(h.costoAnterior)}</td>
+                        <td style={{ padding:"9px 12px", textAlign:"right", fontWeight:800 }}>{fmtDec(h.costoNuevo)}</td>
                         <td style={{ padding:"9px 12px", textAlign:"right" }}>
                           {varCosto && <span style={{ fontSize:11, fontWeight:800, color: Number(varCosto)>=0?"#e74c3c":"#27ae60", background: Number(varCosto)>=0?"#fdecea":"#eafaf1", borderRadius:6, padding:"2px 6px" }}>{Number(varCosto)>=0?"▲":"▼"} {Math.abs(varCosto)}%</span>}
                         </td>
@@ -5825,7 +5896,7 @@ function TabProductos({ data, setData }) {
                       <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center", background: C.crema, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
                         <select value={linea.insumoId} onChange={e => actualizarLinea(idx, "insumoId", e.target.value)}
                           style={{ flex: 2, padding: "8px 10px", borderRadius: 8, border: `2px solid ${C.violetaLight}`, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none" }}>
-                          {data.insumos.map(i => <option key={i.id} value={i.id}>{i.nombre} — {fmt(i.costo)}</option>)}
+                          {data.insumos.map(i => <option key={i.id} value={i.id}>{i.nombre} — {fmtDec(i.costo)}</option>)}
                         </select>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <label style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>x</label>
@@ -5833,7 +5904,7 @@ function TabProductos({ data, setData }) {
                             onChange={e => actualizarLinea(idx, "cantidad", e.target.value)}
                             style={{ width: 60, padding: "8px", borderRadius: 8, border: `2px solid ${C.violetaLight}`, fontSize: 13, fontWeight: 700, textAlign: "center", outline: "none" }} />
                         </div>
-                        <span style={{ fontSize: 12, color: "#e74c3c", fontWeight: 700, minWidth: 60, textAlign: "right" }}>{fmt(subtotal)}</span>
+                        <span style={{ fontSize: 12, color: "#e74c3c", fontWeight: 700, minWidth: 60, textAlign: "right" }}>{fmtDec(subtotal)}</span>
                         <button onClick={() => eliminarLinea(idx)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#e74c3c", padding: "0 4px" }}>✕</button>
                       </div>
                     );
@@ -5842,7 +5913,7 @@ function TabProductos({ data, setData }) {
                   {form.receta.length > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", background: C.violetaPale, borderRadius: 10, padding: "10px 14px", marginTop: 4 }}>
                       <span style={{ fontWeight: 800, color: C.violeta }}>Costo total calculado:</span>
-                      <span style={{ fontWeight: 900, color: "#e74c3c", fontSize: 16 }}>{fmt(costoCalculado(form))}</span>
+                      <span style={{ fontWeight: 900, color: "#e74c3c", fontSize: 16 }}>{fmtDec(costoCalculado(form))}</span>
                     </div>
                   )}
                 </div>
@@ -5880,13 +5951,13 @@ function TabProductos({ data, setData }) {
                   <tr key={h.id} style={{ borderTop:`1px solid ${C.violetaPale}`, background: i%2===0 ? C.blanco : C.crema }}>
                     <td style={{ padding:"10px 14px", color:"#888", fontWeight:600 }}>{fechaLegible(h.fecha)} {h.hora}</td>
                     <td style={{ padding:"10px 14px", fontWeight:800 }}>{h.producto_nombre}</td>
-                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmt(h.precio_anterior)}</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmtDec(h.precio_anterior)}</td>
                     <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:800, color: h.precio_nuevo > h.precio_anterior ? "#e74c3c" : "#27ae60" }}>
-                      {h.precio_nuevo > h.precio_anterior ? "▲" : "▼"} {fmt(h.precio_nuevo)}
+                      {h.precio_nuevo > h.precio_anterior ? "▲" : "▼"} {fmtDec(h.precio_nuevo)}
                     </td>
-                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmt(h.costo_anterior)}</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", color:"#888" }}>{fmtDec(h.costo_anterior)}</td>
                     <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:800, color: h.costo_nuevo > h.costo_anterior ? "#e74c3c" : "#27ae60" }}>
-                      {h.costo_nuevo !== h.costo_anterior ? (h.costo_nuevo > h.costo_anterior ? "▲" : "▼") : "="} {fmt(h.costo_nuevo)}
+                      {h.costo_nuevo !== h.costo_anterior ? (h.costo_nuevo > h.costo_anterior ? "▲" : "▼") : "="} {fmtDec(h.costo_nuevo)}
                     </td>
                   </tr>
                 ))}
