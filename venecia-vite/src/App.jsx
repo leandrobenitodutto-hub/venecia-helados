@@ -329,6 +329,8 @@ const C = {
 };
 
 const MOBILE_TABLE_CSS = `
+  .tbl-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+  .tbl-scroll > table { display: table !important; width: max-content !important; min-width: 100% !important; }
   @media (max-width: 767px) {
     table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   }
@@ -548,10 +550,18 @@ const filtrarPorHora = (ventas, horaDesde, horaHasta, desde, hasta) => {
 };
 
 // Calcula el costo de un producto según su tipo (fijo o receta)
-const calcularCosto = (producto, insumos) => {
+// Una línea de receta puede ser un insumo ({insumoId, cantidad}) o un producto completo ({productoId, cantidad})
+const calcularCosto = (producto, insumos, productos, depth) => {
   if (!producto) return 0;
+  depth = depth || 0;
   if (producto.tipoCosto === "receta" && producto.receta && producto.receta.length > 0) {
     return producto.receta.reduce((total, linea) => {
+      if (linea.productoId != null && linea.productoId !== "") {
+        if (depth >= 5) return total;
+        const sub = (productos || []).find(p => String(p.id) === String(linea.productoId));
+        if (!sub) return total;
+        return total + calcularCosto(sub, insumos, productos, depth + 1) * (Number(linea.cantidad) || 0);
+      }
       const insumo = insumos.find(i => i.id === linea.insumoId);
       if (!insumo) return total;
       return total + (insumo.costo * linea.cantidad);
@@ -1152,10 +1162,10 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
       sucursal_id: sesion.sucursal.id,
       usuario_id: sesion.usuario.id, usuario_nombre: sesion.usuario.nombre,
       items: carrito.map((i) => {
-        const costoReal = calcularCosto(i, data.insumos);
+        const costoReal = calcularCosto(i, data.insumos, data.productos);
         return { id: i.id, nombre: i.nombre, cantidad: i.cantidad, precio: i.precio, costo: costoReal, subtotal: i.subtotal, costo_total: costoReal * i.cantidad };
       }),
-      total, costo_total: carrito.reduce((s, i) => s + calcularCosto(i, data.insumos) * i.cantidad, 0),
+      total, costo_total: carrito.reduce((s, i) => s + calcularCosto(i, data.insumos, data.productos) * i.cantidad, 0),
       formaPago: formaPagoFinal,
       pagosMixtos: pagosMixtos,
       recibido: recibido ? Number(recibido) : 0,
@@ -2277,13 +2287,13 @@ const Card = ({ children, style = {} }) => (
 );
 
 const StatCard = ({ label, value, sub, color, icon, variacion }) => (
-  <Card style={{ borderTop: `4px solid ${color}`, position: "relative", overflow: "hidden" }}>
+  <Card style={{ borderTop: `4px solid ${color}`, position: "relative", overflow: "hidden", padding: 14 }}>
     <div style={{ position: "absolute", top: -15, right: -10, fontSize: 50, opacity: 0.08 }}>{icon}</div>
     <div style={{ fontSize: 11, color: "#999", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{label}</div>
-    <div style={{ fontSize: 24, fontWeight: 900, color, fontFamily: "Baloo 2, cursive" }}>{value}</div>
+    <div style={{ fontSize: "clamp(17px, 5vw, 24px)", fontWeight: 900, color, fontFamily: "Baloo 2, cursive", wordBreak: "break-word" }}>{value}</div>
     <div style={{ fontSize: 12, color: "#aaa", marginTop: 4, fontWeight: 600 }}>{sub}</div>
     {variacion && (
-      <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, background: variacion.sube ? "#e8f8f0" : "#fdecea", borderRadius: 8, padding: "2px 8px" }}>
+      <div style={{ marginTop: 6, display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 4, background: variacion.sube ? "#e8f8f0" : "#fdecea", borderRadius: 8, padding: "2px 8px" }}>
         <span style={{ fontSize: 13 }}>{variacion.sube ? "▲" : "▼"}</span>
         <span style={{ fontSize: 11, fontWeight: 800, color: variacion.sube ? "#27ae60" : "#e74c3c" }}>{variacion.pct}% vs período ant.</span>
       </div>
@@ -3293,7 +3303,7 @@ function TabResultados({ data }) {
         </div>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 }}>
         {/* Estado de resultados */}
         <Card>
           <h4 style={{ margin: "0 0 16px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>
@@ -3381,6 +3391,7 @@ function TabResultados({ data }) {
           <div style={{ padding: "16px 20px", background: C.violetaPale }}>
             <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Desglose por producto</h4>
           </div>
+          <div className="tbl-scroll">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
             <thead>
               <tr style={{ background: C.crema }}>
@@ -3422,7 +3433,7 @@ function TabResultados({ data }) {
                 <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{margen}%</td>
               </tr>
             </tbody>
-          </table>
+          </table></div>
         </Card>
       )}
 
@@ -3600,7 +3611,7 @@ function PuntoDeEquilibrio({ data }) {
         })}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 }}>
 
         {/* Costos fijos */}
         <Card style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
@@ -4086,7 +4097,7 @@ function TabReportes({ data }) {
       {/* ═══ RESUMEN ═══ */}
       {sub === "resumen" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
             <StatCard label="Ventas" value={fmt(Math.round(K.ingresos))} sub={K.tickets + " tickets"} color="#2980b9" icon="💰" variacion={variacion(K.ingresos, KP.ingresos)} />
             <StatCard label="Costo de ventas" value={fmt(Math.round(K.costos))} sub="Costo de lo vendido" color="#e74c3c" icon="🧾" variacion={null} />
             <StatCard label="Ganancia bruta" value={fmt(Math.round(K.ganancia))} sub={"Margen " + (K.margen * 100).toFixed(0) + "%"} color="#27ae60" icon="📈" variacion={variacion(K.ganancia, KP.ganancia)} />
@@ -4097,7 +4108,7 @@ function TabReportes({ data }) {
           </div>
           <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con los {largo} día(s) anteriores ({fechaLegible(prevDesde)} al {fechaLegible(prevHasta)}).</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: 16, marginBottom: 16 }}>
             <Card>
               <h4 style={{ margin: "0 0 14px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Por forma de pago</h4>
               {[
@@ -4142,6 +4153,7 @@ function TabReportes({ data }) {
               <div style={{ padding: "14px 20px", background: C.violetaPale }}>
                 <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Comparativo por sucursal</h4>
               </div>
+              <div className="tbl-scroll">
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: C.crema }}>
@@ -4166,7 +4178,7 @@ function TabReportes({ data }) {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           )}
 
@@ -4174,7 +4186,7 @@ function TabReportes({ data }) {
             <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>{serieDias.titulo}</h4>
             {serieDias.items.length > 0 ? <BarrasSimple items={serieDias.items} color={C.violetaMed} formato={function(v) { return fmt(Math.round(v)); }} /> : <div style={{ color: "#bbb", fontSize: 13 }}>Sin ventas en el período</div>}
           </Card>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: 16 }}>
             <Card>
               <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Promedio por día de la semana</h4>
               <BarrasSimple items={serieDow} color="#e67e22" formato={function(v) { return fmt(Math.round(v)); }} />
@@ -4190,6 +4202,7 @@ function TabReportes({ data }) {
               <div style={{ padding: "14px 20px", background: C.violetaPale }}>
                 <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>🕐 Ventas hora por hora</h4>
               </div>
+              <div className="tbl-scroll">
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
                 <thead>
                   <tr style={{ background: C.crema }}>
@@ -4220,7 +4233,7 @@ function TabReportes({ data }) {
                     {!sucFiltro && sucursales.length > 1 && sucursales.map(function(s) { return <td key={s.id} style={Object.assign({}, tdN, { color: C.violeta })}>{fmt(Math.round(tablaHora.reduce(function(a, r) { return a + (r.porSuc[s.id] || 0); }, 0)))}</td>; })}
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           )}
         </div>
@@ -4239,6 +4252,7 @@ function TabReportes({ data }) {
           {productosOrdenados.length === 0 ? (
             <div style={{ padding: 24, textAlign: "center", color: "#bbb", fontWeight: 700 }}>Sin ventas en el período</div>
           ) : (
+            <div className="tbl-scroll">
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
               <thead>
                 <tr style={{ background: C.crema }}>
@@ -4275,7 +4289,7 @@ function TabReportes({ data }) {
                   <td></td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
       )}
@@ -4329,6 +4343,7 @@ function TabReportes({ data }) {
             <div style={{ padding: "14px 20px", background: C.violetaPale }}>
               <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Equilibrio por sucursal — {labelPeriodo}</h4>
             </div>
+            <div className="tbl-scroll">
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
               <thead>
                 <tr style={{ background: C.crema }}>
@@ -4371,11 +4386,11 @@ function TabReportes({ data }) {
                   <td style={Object.assign({}, tdN, { color: (kTodas.ganancia - cfTotalTodas) >= 0 ? "#27ae60" : "#e74c3c" })}>{fmt(Math.round(kTodas.ganancia - cfTotalTodas))}</td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           </Card>
 
           {/* Detalle del alcance elegido en el filtro */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
             <StatCard label="Margen del período" value={(margenScope * 100).toFixed(0) + "%"} sub={nombreScope} color="#27ae60" icon="📈" variacion={null} />
             <StatCard label="Costo fijo del período" value={fmt(Math.round(cfScope.total))} sub={enCurso ? "Mes completo" : "Prorrateado por días"} color="#e74c3c" icon="📋" variacion={null} />
             <StatCard label="Punto de equilibrio" value={peScope > 0 ? fmt(Math.round(peScope)) : "—"} sub={peScope > 0 ? fmt(Math.round(cfScope.total)) + " ÷ " + (margenScope * 100).toFixed(0) + "%" : "Cargá costos fijos"} color={C.violeta} icon="⚖️" variacion={null} />
@@ -4730,6 +4745,7 @@ function TabCaja({ data }) {
 // ─── TAB INSUMOS ─────────────────────────────────────────────────────────────
 function TabInsumos({ data, setData }) {
   const [editando, setEditando] = useState(null);
+  const [busquedaIns, setBusquedaIns] = useState("");
   const [form, setForm] = useState({ nombre: "", costo: "" });
 
   const abrirForm = (ins = null) => {
@@ -4771,6 +4787,8 @@ function TabInsumos({ data, setData }) {
         </button>
       </div>
 
+      <input value={busquedaIns} onChange={e => setBusquedaIns(e.target.value)} placeholder="🔍 Buscar insumo..."
+        style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: `2px solid ${C.violetaLight}`, fontSize: 14, fontFamily: "Nunito, sans-serif", fontWeight: 600, boxSizing: "border-box", outline: "none", marginBottom: 12, background: C.blanco }} />
       <Card style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 400 }}>
           <thead>
@@ -4781,7 +4799,7 @@ function TabInsumos({ data, setData }) {
             </tr>
           </thead>
           <tbody>
-            {data.insumos.map((ins, i) => {
+            {data.insumos.filter(ins => !busquedaIns.trim() || String(ins.nombre).toLowerCase().indexOf(busquedaIns.trim().toLowerCase()) >= 0).map((ins, i) => {
               const usadoEn = data.productos.filter(p => p.receta && p.receta.some(r => r.insumoId === ins.id));
               return (
                 <tr key={ins.id} style={{ borderTop: `1px solid ${C.violetaPale}`, background: i % 2 === 0 ? C.blanco : C.crema }}>
@@ -5370,12 +5388,17 @@ function TabProductos({ data, setData }) {
     try { return JSON.parse(localStorage.getItem("venecia_historial_precios") || "[]"); } catch { return []; }
   });
   const [editando, setEditando] = useState(null);
+  const [busqueda, setBusqueda] = useState("");
   const [form, setForm] = useState({ nombre: "", precio: "", costo: "", stockKg: "", emoji: "🍦", categoria: "productos", tipoCosto: "fijo", receta: [], sucursales_ids: null });
   const emojis = ["🍦", "🍧", "🍨", "🥤", "🍌", "⭐", "🥛", "🍫", "🍓", "🍑", "🥭", "🧁", "🍬", "🍰", "🍭", "🎂", "📦", "🧊", "🍋", "❤️", "🎁", "⚡", "☕", "🧋", "🥧", "🍪", "🍩", "🥜", "🍯", "🍒", "🥥", "🍇", "🍉", "🍍", "🧇", "🥐", "🍿", "🍮", "🍡", "🥮", "🍕", "🌮", "🥪", "🍔", "🌭", "🥨", "🍟"];
 
   const costoCalculado = (f) => {
     if (f.tipoCosto === "receta" && f.receta && f.receta.length > 0) {
       return f.receta.reduce((t, linea) => {
+        if (linea.productoId != null) {
+          const sub = data.productos.find(p => String(p.id) === String(linea.productoId));
+          return t + (sub ? calcularCosto(sub, data.insumos, data.productos) * (Number(linea.cantidad) || 0) : 0);
+        }
         const ins = data.insumos.find(i => i.id === linea.insumoId);
         return t + (ins ? ins.costo * linea.cantidad : 0);
       }, 0);
@@ -5390,7 +5413,9 @@ function TabProductos({ data, setData }) {
       return;
     }
     const recetaSegura = Array.isArray(prod.receta)
-      ? prod.receta.map(r => ({ insumoId: Number(r.insumoId), cantidad: Number(r.cantidad) || 1 }))
+      ? prod.receta.map(r => r.productoId != null
+          ? { productoId: r.productoId, cantidad: Number(r.cantidad) || 1 }
+          : { insumoId: Number(r.insumoId), cantidad: Number(r.cantidad) || 1 })
       : [];
     setForm({
       nombre: String(prod.nombre || ""),
@@ -5408,6 +5433,22 @@ function TabProductos({ data, setData }) {
 
   const agregarLineaReceta = () => {
     setForm(f => ({ ...f, receta: [...f.receta, { insumoId: Number(data.insumos[0] ? data.insumos[0].id : null) || null, cantidad: 1 }] }));
+  };
+
+  const agregarLineaProducto = () => {
+    const otros = data.productos.filter(p => String(p.id) !== String(editando));
+    if (otros.length === 0) return;
+    setForm(f => ({ ...f, receta: [...f.receta, { productoId: otros[0].id, cantidad: 1 }] }));
+  };
+
+  // Cambia el ítem de una línea: valor "i:ID" (insumo) o "p:ID" (producto completo)
+  const cambiarItemLinea = (idx, valor) => {
+    const tipo = valor.slice(0, 1), id = valor.slice(2);
+    setForm(f => ({ ...f, receta: f.receta.map((l, i) => {
+      if (i !== idx) return l;
+      if (tipo === "p") { const p = data.productos.find(x => String(x.id) === id); return { productoId: p ? p.id : id, cantidad: l.cantidad }; }
+      return { insumoId: Number(id), cantidad: l.cantidad };
+    }) }));
   };
 
   const actualizarLinea = (idx, campo, valor) => {
@@ -5450,7 +5491,13 @@ function TabProductos({ data, setData }) {
   };
 
   // Recalcular costos de receta al cambiar insumos
-  const productosConCosto = data.productos.map(p => ({ ...p, costoReal: calcularCosto(p, data.insumos) }));
+  const productosConCosto = data.productos.map(p => ({ ...p, costoReal: calcularCosto(p, data.insumos, data.productos) }));
+  const normTxt = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const productosFiltrados = productosConCosto.filter(p => {
+    if (!busqueda.trim()) return true;
+    const cat = (categorias.find(c => c.key === p.categoria) || {}).label || p.categoria;
+    return normTxt(p.nombre).indexOf(normTxt(busqueda)) >= 0 || normTxt(cat).indexOf(normTxt(busqueda)) >= 0;
+  });
 
   const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 12, border: `2px solid ${C.violetaLight}`, fontSize: 14, fontFamily: "Nunito, sans-serif", fontWeight: 600, boxSizing: "border-box", outline: "none" };
 
@@ -5637,26 +5684,12 @@ function TabProductos({ data, setData }) {
 
       {subTab === "productos" && (
         <>
-          {/* Banner stock */}
-          {(() => {
-            const sinStock = data.productos.filter(p => p.activo && p.stockKg !== undefined && p.stockKg !== null && Number(p.stockKg) <= 0);
-            return sinStock.length > 0 ? (
-              <div style={{ background: "#ffe8e8", border: "1px solid #ffb3b3", borderRadius: 12, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 18 }}>⚠️</span>
-                <span style={{ color: "#c0392b", fontWeight: 700, fontSize: 13 }}>
-                  {sinStock.length} producto{sinStock.length > 1 ? "s" : ""} sin stock: {sinStock.map(p => p.nombre).join(", ")}
-                </span>
-              </div>
-            ) : (
-              <div style={{ background: C.mentaPale, borderRadius: 12, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 18 }}>✅</span>
-                <span style={{ color: "#2a7a5e", fontWeight: 700, fontSize: 13 }}>Todos los productos tienen stock disponible</span>
-              </div>
-            );
-          })()}
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto o categoría..."
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: `2px solid ${C.violetaLight}`, fontSize: 14, fontFamily: "Nunito, sans-serif", fontWeight: 600, boxSizing: "border-box", outline: "none", marginBottom: 12, background: C.blanco }} />
+          {productosFiltrados.length === 0 && <Card style={{ textAlign: "center", color: "#aaa", fontWeight: 700 }}>No se encontraron productos</Card>}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {productosConCosto.map((p, i) => {
+            {productosFiltrados.map((p, i) => {
               const margen = p.precio > 0 ? Math.round(((p.precio - p.costoReal) / p.precio) * 100) : 0;
               return (
                 <Card key={p.id} style={{ padding: "12px 16px", opacity: p.activo ? 1 : 0.6, borderLeft: `4px solid ${p.activo ? C.violeta : "#ddd"}` }}>
@@ -5877,10 +5910,15 @@ function TabProductos({ data, setData }) {
               {form.tipoCosto === "receta" && (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <label style={{ fontSize: 12, color: C.violeta, fontWeight: 800, textTransform: "uppercase" }}>Insumos de la receta</label>
-                    <button onClick={agregarLineaReceta} style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: C.violeta, color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
-                      + Agregar insumo
-                    </button>
+                    <label style={{ fontSize: 12, color: C.violeta, fontWeight: 800, textTransform: "uppercase" }}>Receta (insumos y/o productos)</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button onClick={agregarLineaReceta} style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: C.violeta, color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
+                        + Insumo
+                      </button>
+                      <button onClick={agregarLineaProducto} style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: "#e67e22", color: C.blanco, fontWeight: 800, cursor: "pointer", fontSize: 12, fontFamily: "Nunito, sans-serif" }}>
+                        + Producto completo
+                      </button>
+                    </div>
                   </div>
 
                   {form.receta.length === 0 && (
@@ -5890,13 +5928,22 @@ function TabProductos({ data, setData }) {
                   )}
 
                   {form.receta.map((linea, idx) => {
-                    const ins = data.insumos.find(i => i.id === linea.insumoId);
-                    const subtotal = ins ? ins.costo * linea.cantidad : 0;
+                    const esProd = linea.productoId != null;
+                    const ins = esProd ? null : data.insumos.find(i => i.id === linea.insumoId);
+                    const subProd = esProd ? data.productos.find(p => String(p.id) === String(linea.productoId)) : null;
+                    const subtotal = esProd
+                      ? (subProd ? calcularCosto(subProd, data.insumos, data.productos) * (Number(linea.cantidad) || 0) : 0)
+                      : (ins ? ins.costo * linea.cantidad : 0);
                     return (
-                      <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center", background: C.crema, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
-                        <select value={linea.insumoId} onChange={e => actualizarLinea(idx, "insumoId", e.target.value)}
-                          style={{ flex: 2, padding: "8px 10px", borderRadius: 8, border: `2px solid ${C.violetaLight}`, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none" }}>
-                          {data.insumos.map(i => <option key={i.id} value={i.id}>{i.nombre} — {fmtDec(i.costo)}</option>)}
+                      <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", background: esProd ? "#fff3e0" : C.crema, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
+                        <select value={esProd ? "p:" + linea.productoId : "i:" + linea.insumoId} onChange={e => cambiarItemLinea(idx, e.target.value)}
+                          style={{ flex: 2, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `2px solid ${C.violetaLight}`, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, outline: "none" }}>
+                          <optgroup label="Insumos">
+                            {data.insumos.map(i => <option key={"i" + i.id} value={"i:" + i.id}>{i.nombre} — {fmtDec(i.costo)}</option>)}
+                          </optgroup>
+                          <optgroup label="Productos (receta completa)">
+                            {data.productos.filter(p => String(p.id) !== String(editando)).map(p => <option key={"p" + p.id} value={"p:" + p.id}>{p.emoji} {p.nombre} — {fmtDec(calcularCosto(p, data.insumos, data.productos))}</option>)}
+                          </optgroup>
                         </select>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <label style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>x</label>
