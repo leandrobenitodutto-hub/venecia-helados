@@ -2116,6 +2116,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "dashboard", icon: "📊", label: "Dashboard" },
     { key: "ventas", icon: "📋", label: "Ventas" },
     { key: "resultados", icon: "💰", label: "Resultados" },
+    { key: "reportes", icon: "📈", label: "Reportes" },
     { key: "caja", icon: "🏪", label: "Caja" },
     { key: "consumos", icon: "👤", label: "Consumos" },
     { key: "consumidores", icon: "🧑‍🤝‍🧑", label: "Consumidores" },
@@ -2244,6 +2245,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "dashboard" && <Dashboard data={data} />}
           {tab === "ventas" && <TabVentas data={data} setData={setData} />}
           {tab === "resultados" && <TabResultados data={data} />}
+          {tab === "reportes" && <TabReportes data={data} />}
           {tab === "caja" && <TabCaja data={data} />}
           {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
           {tab === "consumidores" && <TabConsumidores data={data} setData={setData} />}
@@ -3197,6 +3199,8 @@ function TabResultados({ data }) {
   const [horaDesde, setHoraDesde] = useState("");
   const [horaHasta, setHoraHasta] = useState("");
   const [sucFiltro, setSucFiltro] = useState("");
+  const [sortCol, setSortCol] = useState("ingresos");
+  const [sortDir, setSortDir] = useState("desc");
 
   const setAtajo = (tipo) => {
     const hoyStr = hoy();
@@ -3230,7 +3234,19 @@ function TabResultados({ data }) {
     const prod = data.productos.find(p => p.id === item.id || p.nombre === item.nombre);
     if (prod && prod.stockKg > 0) totalKgVendidos += item.cantidad * prod.stockKg;
   }));
-  const tablaProductos = Object.values(porProducto).sort((a, b) => b.ingresos - a.ingresos);
+  const valorOrden = (p, col) => col === "nombre" ? p.nombre.toLowerCase()
+    : col === "ganancia" ? p.ingresos - p.costos
+    : col === "margen" ? (p.ingresos > 0 ? (p.ingresos - p.costos) / p.ingresos : 0)
+    : p[col];
+  const tablaProductos = Object.values(porProducto).sort((a, b) => {
+    const va = valorOrden(a, sortCol), vb = valorOrden(b, sortCol);
+    const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+  const cambiarOrden = (col) => {
+    if (sortCol === col) setSortDir(sortDir === "desc" ? "asc" : "desc");
+    else { setSortCol(col); setSortDir(col === "nombre" ? "asc" : "desc"); }
+  };
 
   const porPago = { efectivo: 0, tarjeta: 0, qr: 0 };
   ventasFiltradas.forEach((v) => { porPago[v.formaPago] = (porPago[v.formaPago] || 0) + v.total; });
@@ -3366,8 +3382,11 @@ function TabResultados({ data }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
             <thead>
               <tr style={{ background: C.crema }}>
-                {["Producto", "Cant.", "Ingresos", "Costos", "Ganancia", "Margen"].map((h, i) => (
-                  <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                {[["nombre","Producto"],["cantidad","Cant."],["ingresos","Ingresos"],["costos","Costos"],["ganancia","Ganancia"],["margen","Margen"]].map(([col, h], i) => (
+                  <th key={col} onClick={() => cambiarOrden(col)} title="Click para ordenar"
+                    style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", background: sortCol === col ? C.violetaPale : "transparent" }}>
+                    {h} <span style={{ opacity: sortCol === col ? 1 : 0.25 }}>{sortCol === col ? (sortDir === "desc" ? "▼" : "▲") : "⇅"}</span>
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -3395,11 +3414,10 @@ function TabResultados({ data }) {
               <tr style={{ background: C.violetaPale, fontWeight:900 }}>
                 <td style={{ padding:"10px 14px", color:C.violeta }}>TOTAL</td>
                 <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{tablaProductos.reduce((s,p)=>s+p.cantidad,0)}</td>
-                <td style={{ padding:"10px 14px", textAlign:"right", color:"#7d3c98" }}>{totalKgVendidos >= 1 ? totalKgVendidos.toFixed(2) + " kg" : (totalKgVendidos*1000).toFixed(0) + " g"}</td>
                 <td style={{ padding:"10px 14px", textAlign:"right", color:"#2980b9" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos,0))}</td>
                 <td style={{ padding:"10px 14px", textAlign:"right", color:"#e74c3c" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.costos,0))}</td>
                 <td style={{ padding:"10px 14px", textAlign:"right", color:"#27ae60" }}>{fmt(tablaProductos.reduce((s,p)=>s+p.ingresos-p.costos,0))}</td>
-                <td></td>
+                <td style={{ padding:"10px 14px", textAlign:"right", color:C.violeta }}>{margen}%</td>
               </tr>
             </tbody>
           </table>
@@ -3681,6 +3699,653 @@ function PuntoDeEquilibrio({ data }) {
 }
 
 
+// ─── REPORTES ────────────────────────────────────────────────────────────────
+const addDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const diasEntre = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000) + 1;
+const diasDelMes = (mes) => { const p = mes.split("-").map(Number); return new Date(p[0], p[1], 0).getDate(); };
+const rangoAtajo = (tipo) => {
+  const h = hoy();
+  const dow = new Date(h + "T12:00:00").getDay();
+  const lunes = addDias(h, -(dow === 0 ? 6 : dow - 1));
+  const primeroMes = h.slice(0, 7) + "-01";
+  const finMesAnt = addDias(primeroMes, -1);
+  if (tipo === "hoy") return [h, h];
+  if (tipo === "ayer") return [addDias(h, -1), addDias(h, -1)];
+  if (tipo === "semana") return [lunes, h];
+  if (tipo === "semAnt") return [addDias(lunes, -7), addDias(lunes, -1)];
+  if (tipo === "mes") return [primeroMes, h];
+  if (tipo === "mesAnt") return [finMesAnt.slice(0, 7) + "-01", finMesAnt];
+  if (tipo === "anio") return [h.slice(0, 4) + "-01-01", h];
+  return [primeroMes, h];
+};
+const ATAJOS_REPORTE = [
+  { key: "hoy", label: "Hoy" }, { key: "ayer", label: "Ayer" }, { key: "semana", label: "Esta semana" },
+  { key: "semAnt", label: "Sem. anterior" }, { key: "mes", label: "Este mes" }, { key: "mesAnt", label: "Mes anterior" },
+  { key: "anio", label: "Este año" },
+];
+
+function BarrasSimple({ items, color, formato }) {
+  const W = 560, H = 170, PL = 8, PR = 8, PT = 16, PB = 26;
+  const max = Math.max.apply(null, items.map(function(i) { return i.value; }).concat([1]));
+  const bw = (W - PL - PR) / Math.max(items.length, 1);
+  const paso = Math.max(1, Math.ceil(items.length / 12));
+  const f = formato || function(v) { return String(v); };
+  return (
+    <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", display: "block" }}>
+      <text x={PL} y={10} fontSize="9" fill="#aaa" fontFamily="Nunito, sans-serif">{"máx " + f(max)}</text>
+      {items.map(function(it, i) {
+        const h = (it.value / max) * (H - PT - PB);
+        const x = PL + i * bw;
+        return (
+          <g key={i}>
+            <title>{it.label + ": " + f(it.value)}</title>
+            <rect x={x + bw * 0.12} y={H - PB - h} width={bw * 0.76} height={Math.max(h, it.value > 0 ? 1 : 0)} fill={color} rx="2" />
+            {i % paso === 0 && <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="#999" fontFamily="Nunito, sans-serif">{it.label}</text>}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function TabReportes({ data }) {
+  const sucursales = data.sucursales || [];
+  const hoyStr = hoy();
+  const primeroMesActual = hoyStr.slice(0, 7) + "-01";
+  const [rango0, rango1] = rangoAtajo("mes");
+  const [desde, setDesde] = useState(rango0);
+  const [hasta, setHasta] = useState(rango1);
+  const [sucFiltro, setSucFiltro] = useState("");
+  const [sub, setSub] = useState("resumen");
+  const [busqueda, setBusqueda] = useState("");
+  const [sortCol, setSortCol] = useState("ingresos");
+  const [sortDir, setSortDir] = useState("desc");
+  const [cfMap, setCfMap] = useState({});
+  const [dbOk, setDbOk] = useState(true);
+  const [errGuardado, setErrGuardado] = useState("");
+  const [mesEdit, setMesEdit] = useState(rango1.slice(0, 7));
+  const [cfInputs, setCfInputs] = useState({});
+
+  // ── Costos fijos: Supabase (tabla costos_fijos) con respaldo local ──
+  useEffect(function() {
+    let vivo = true;
+    (async function() {
+      const local = {};
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf("venecia_cfm_") === 0) local[k.slice(12)] = Number(localStorage.getItem(k));
+        }
+      } catch (e) {}
+      try {
+        const res = await supabase.from("costos_fijos").select("*");
+        if (res.error) throw res.error;
+        const m = {};
+        (res.data || []).forEach(function(r) { m[r.mes + "|" + r.sucursal_id] = Number(r.monto); });
+        if (vivo) { setCfMap(m); setDbOk(true); }
+      } catch (e) {
+        if (vivo) { setCfMap(local); setDbOk(false); }
+      }
+    })();
+    return function() { vivo = false; };
+  }, []);
+
+  const guardarCFMes = async function(mes, sid, valor) {
+    const n = Number(valor);
+    if (isNaN(n) || n < 0) return;
+    const key = mes + "|" + sid;
+    setCfMap(function(prev) { const o = Object.assign({}, prev); o[key] = n; return o; });
+    try { localStorage.setItem("venecia_cfm_" + key, String(n)); } catch (e) {}
+    setErrGuardado("");
+    try {
+      const res = await supabase.from("costos_fijos").upsert(
+        { mes: mes, sucursal_id: sid, monto: n, actualizado: new Date().toISOString() },
+        { onConflict: "mes,sucursal_id" }
+      );
+      if (res.error) throw res.error;
+    } catch (e) {
+      setErrGuardado("No se pudo guardar en la nube (quedó solo en este dispositivo). Revisá que la tabla costos_fijos exista en Supabase.");
+    }
+  };
+
+  // costo fijo de un mes/sucursal; si no está cargado, repite el último mes cargado
+  const cfDe = function(mes, sid) {
+    const k = mes + "|" + sid;
+    if (cfMap[k] !== undefined) return { monto: cfMap[k], heredado: false };
+    let best = null;
+    Object.keys(cfMap).forEach(function(key) {
+      const p = key.split("|");
+      if (Number(p[1]) === Number(sid) && p[0] < mes && (best === null || p[0] > best.m)) best = { m: p[0], monto: cfMap[key] };
+    });
+    return best ? { monto: best.monto, heredado: true, desdeMes: best.m } : { monto: 0, heredado: false };
+  };
+
+  const enCurso = desde === primeroMesActual && hasta === hoyStr; // mes en curso: se usa el costo fijo del mes completo
+
+  const cfPeriodo = function(sids) {
+    let tot = 0, hereda = false;
+    let y = Number(desde.slice(0, 4)), m = Number(desde.slice(5, 7));
+    const fin = hasta.slice(0, 7);
+    for (let guard = 0; guard < 600; guard++) {
+      const mes = y + "-" + String(m).padStart(2, "0");
+      const dm = diasDelMes(mes);
+      const ini = mes + "-01" > desde ? mes + "-01" : desde;
+      const finMes = mes + "-" + String(dm).padStart(2, "0");
+      const f = finMes < hasta ? finMes : hasta;
+      const dias = enCurso ? dm : Math.max(diasEntre(ini, f), 0);
+      sids.forEach(function(sid) {
+        const r = cfDe(mes, sid);
+        tot += r.monto * dias / dm;
+        if (r.heredado) hereda = true;
+      });
+      if (mes >= fin) break;
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return { total: tot, hereda: hereda };
+  };
+
+  // ── Datos filtrados ──
+  const ventasSuc = data.ventas.filter(function(v) { return !sucFiltro || v.sucursal_id === Number(sucFiltro); });
+  const ventas = ventasSuc.filter(function(v) { return v.fecha >= desde && v.fecha <= hasta; });
+  const largo = Math.max(diasEntre(desde, hasta), 1);
+  const prevHasta = addDias(desde, -1);
+  const prevDesde = addDias(desde, -largo);
+  const ventasPrev = ventasSuc.filter(function(v) { return v.fecha >= prevDesde && v.fecha <= prevHasta; });
+
+  const calc = function(vs) {
+    const ingresos = vs.reduce(function(s, v) { return s + v.total; }, 0);
+    const costos = vs.reduce(function(s, v) { return s + (v.costo_total || 0); }, 0);
+    const ganancia = ingresos - costos;
+    return { ingresos: ingresos, costos: costos, ganancia: ganancia, margen: ingresos > 0 ? ganancia / ingresos : 0, tickets: vs.length, ticketProm: vs.length > 0 ? ingresos / vs.length : 0 };
+  };
+  const K = calc(ventas);
+  const KP = calc(ventasPrev);
+  const variacion = function(act, prev) {
+    if (!prev) return null;
+    const p = ((act - prev) / prev) * 100;
+    return { sube: p >= 0, pct: Math.abs(p).toFixed(1) };
+  };
+
+  // productos
+  const porProducto = {};
+  let totalKg = 0;
+  ventas.forEach(function(v) {
+    (v.items || []).forEach(function(item) {
+      if (!porProducto[item.nombre]) porProducto[item.nombre] = { nombre: item.nombre, cantidad: 0, ingresos: 0, costos: 0 };
+      porProducto[item.nombre].cantidad += item.cantidad;
+      porProducto[item.nombre].ingresos += item.subtotal;
+      porProducto[item.nombre].costos += item.costo_total || 0;
+      const prod = data.productos.find(function(p) { return p.id === item.id || p.nombre === item.nombre; });
+      if (prod && prod.stockKg > 0) totalKg += item.cantidad * prod.stockKg;
+    });
+  });
+  const listaProductos = Object.values(porProducto);
+  const valorOrden = function(p, col) {
+    return col === "nombre" ? p.nombre.toLowerCase()
+      : col === "ganancia" ? p.ingresos - p.costos
+      : col === "margen" ? (p.ingresos > 0 ? (p.ingresos - p.costos) / p.ingresos : 0)
+      : p[col];
+  };
+  const productosOrdenados = listaProductos
+    .filter(function(p) { return !busqueda || p.nombre.toLowerCase().indexOf(busqueda.toLowerCase()) >= 0; })
+    .sort(function(a, b) {
+      const va = valorOrden(a, sortCol), vb = valorOrden(b, sortCol);
+      const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  const cambiarOrden = function(col) {
+    if (sortCol === col) setSortDir(sortDir === "desc" ? "asc" : "desc");
+    else { setSortCol(col); setSortDir(col === "nombre" ? "asc" : "desc"); }
+  };
+  const top5 = listaProductos.slice().sort(function(a, b) { return b.ingresos - a.ingresos; }).slice(0, 5);
+
+  // pagos
+  const porPago = {};
+  ventas.forEach(function(v) { porPago[v.formaPago] = (porPago[v.formaPago] || 0) + v.total; });
+
+  // ventas por día (o por mes si el rango es largo)
+  const serieDias = (function() {
+    const mapa = {};
+    ventas.forEach(function(v) { mapa[v.fecha] = (mapa[v.fecha] || 0) + v.total; });
+    if (largo <= 62) {
+      const out = [];
+      for (let i = 0; i < largo; i++) { const f = addDias(desde, i); out.push({ label: f.slice(8, 10) + "/" + f.slice(5, 7), value: mapa[f] || 0 }); }
+      return { items: out, titulo: "Ventas por día" };
+    }
+    const meses = {};
+    ventas.forEach(function(v) { const m = v.fecha.slice(0, 7); meses[m] = (meses[m] || 0) + v.total; });
+    return { items: Object.keys(meses).sort().map(function(m) { return { label: m.slice(5, 7) + "/" + m.slice(2, 4), value: meses[m] }; }), titulo: "Ventas por mes" };
+  })();
+
+  // por día de semana (promedio por día) y por hora
+  const NOMBRES_DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const serieDow = (function() {
+    const tot = [0, 0, 0, 0, 0, 0, 0], cnt = [0, 0, 0, 0, 0, 0, 0];
+    const fin = hasta < hoyStr ? hasta : hoyStr;
+    const n = Math.min(diasEntre(desde, fin), 800);
+    for (let i = 0; i < n; i++) cnt[new Date(addDias(desde, i) + "T12:00:00").getDay()]++;
+    ventas.forEach(function(v) { tot[new Date(v.fecha + "T12:00:00").getDay()] += v.total; });
+    return [1, 2, 3, 4, 5, 6, 0].map(function(d) { return { label: NOMBRES_DOW[d], value: cnt[d] > 0 ? Math.round(tot[d] / cnt[d]) : 0 }; });
+  })();
+  const serieHora = (function() {
+    const tot = {};
+    ventas.forEach(function(v) { const h = parseInt(String(v.hora || "").slice(0, 2), 10); if (!isNaN(h)) tot[h] = (tot[h] || 0) + v.total; });
+    const hs = Object.keys(tot).map(Number);
+    if (hs.length === 0) return [];
+    const mn = Math.min.apply(null, hs), mx = Math.max.apply(null, hs);
+    const out = [];
+    for (let h = mn; h <= mx; h++) out.push({ label: h + "h", value: tot[h] || 0 });
+    return out;
+  })();
+
+  // ── Punto de equilibrio ──
+  const sidsScope = sucFiltro ? [Number(sucFiltro)] : [0].concat(sucursales.map(function(s) { return s.id; }));
+  const cfScope = cfPeriodo(sidsScope);
+  const margenScope = K.margen;
+  const peScope = margenScope > 0 && cfScope.total > 0 ? cfScope.total / margenScope : 0;
+  const progreso = peScope > 0 ? Math.min(K.ingresos / peScope, 1) : 0;
+  const resultadoNeto = K.ganancia - cfScope.total;
+  const colorProg = progreso >= 1 ? "#27ae60" : progreso >= 0.7 ? "#e67e22" : "#e74c3c";
+  const bgProg = progreso >= 1 ? "#e8f8f1" : progreso >= 0.7 ? "#fff3e0" : "#fdecea";
+  const diaActualMes = Number(hoyStr.slice(8, 10));
+  const diasMesActual = diasDelMes(hoyStr.slice(0, 7));
+  const proyeccion = enCurso && diaActualMes > 0 ? (K.ingresos / diaActualMes) * diasMesActual : 0;
+  const serieAcum = (function() {
+    const mapa = {};
+    ventas.forEach(function(v) { mapa[v.fecha] = (mapa[v.fecha] || 0) + v.total; });
+    const out = []; let acum = 0;
+    const n = enCurso ? diaActualMes : Math.min(largo, 400);
+    for (let i = 0; i < n; i++) { acum += mapa[addDias(desde, i)] || 0; out.push({ dia: i + 1, acum: acum }); }
+    return out;
+  })();
+  const filasPE = sucursales.map(function(s) {
+    const vs = ventas0(s.id);
+    const k = calc(vs);
+    const cf = cfPeriodo([s.id]).total;
+    const pe = k.margen > 0 && cf > 0 ? cf / k.margen : 0;
+    return { nombre: s.nombre, ingresos: k.ingresos, margen: k.margen, cf: cf, pe: pe, neto: k.ganancia - cf };
+  });
+  function ventas0(sid) { return data.ventas.filter(function(v) { return v.sucursal_id === sid && v.fecha >= desde && v.fecha <= hasta; }); }
+  const kTodas = calc(data.ventas.filter(function(v) { return v.fecha >= desde && v.fecha <= hasta; }));
+  const cfGeneral = cfPeriodo([0]).total;
+  const cfTotalTodas = filasPE.reduce(function(s, f) { return s + f.cf; }, 0) + cfGeneral;
+  const peTodas = kTodas.margen > 0 && cfTotalTodas > 0 ? cfTotalTodas / kTodas.margen : 0;
+
+  const exportarProductos = function() {
+    const XLSX = window.XLSX;
+    if (!XLSX) { alert("Librería Excel no disponible. Recargá la página e intentá de nuevo."); return; }
+    const filas = productosOrdenados.map(function(p) {
+      return { "Producto": p.nombre, "Cantidad": p.cantidad, "Ingresos": Math.round(p.ingresos), "% Ingresos": K.ingresos > 0 ? Math.round(p.ingresos / K.ingresos * 1000) / 10 : 0,
+        "Costos": Math.round(p.costos), "Ganancia": Math.round(p.ingresos - p.costos), "Margen %": p.ingresos > 0 ? Math.round((p.ingresos - p.costos) / p.ingresos * 1000) / 10 : 0 };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Productos");
+    XLSX.writeFile(wb, "reporte_productos_" + desde + "_a_" + hasta + ".xlsx");
+  };
+
+  // ── Estilos ──
+  const filtroStyle = { padding: "8px 12px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, color: C.dark, outline: "none", background: C.blanco };
+  const th = function(col, label, i) {
+    return (
+      <th key={col} onClick={function() { cambiarOrden(col); }} title="Click para ordenar"
+        style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", background: sortCol === col ? C.violetaPale : "transparent" }}>
+        {label} <span style={{ opacity: sortCol === col ? 1 : 0.25 }}>{sortCol === col ? (sortDir === "desc" ? "▼" : "▲") : "⇅"}</span>
+      </th>
+    );
+  };
+  const tdN = { padding: "10px 14px", textAlign: "right" };
+  const labelPeriodo = desde === hasta ? fechaLegible(desde) : fechaLegible(desde) + " al " + fechaLegible(hasta);
+  const nombreScope = sucFiltro ? (sucursales.find(function(s) { return s.id === Number(sucFiltro); }) || {}).nombre : "Todas las sucursales";
+  const atajoActivo = (ATAJOS_REPORTE.find(function(a) { const r = rangoAtajo(a.key); return r[0] === desde && r[1] === hasta; }) || {}).key;
+  const SUBS = [{ key: "resumen", label: "📊 Resumen" }, { key: "productos", label: "🍦 Productos" }, { key: "pe", label: "⚖️ Punto de equilibrio" }];
+
+  const nombreSid = function(sid) { return sid === 0 ? "🏢 Generales / compartidos" : "📍 " + ((sucursales.find(function(s) { return s.id === sid; }) || {}).nombre || sid); };
+  const sidsEdit = [0].concat(sucursales.map(function(s) { return s.id; }));
+  const totalMesEdit = sidsEdit.reduce(function(s, sid) { return s + cfDe(mesEdit, sid).monto; }, 0);
+
+  return (
+    <div>
+      <SectionTitle>Reportes</SectionTitle>
+
+      {/* Filtros */}
+      <Card style={{ marginBottom: 16, padding: "14px 18px" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {ATAJOS_REPORTE.map(function(a) {
+            const act = atajoActivo === a.key;
+            return (
+              <button key={a.key} onClick={function() { const r = rangoAtajo(a.key); setDesde(r[0]); setHasta(r[1]); setMesEdit(r[1].slice(0, 7)); }}
+                style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "Nunito, sans-serif", background: act ? C.violeta : C.violetaPale, color: act ? "white" : C.violeta }}>
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Desde</span>
+          <input type="date" value={desde} onChange={function(e) { if (e.target.value) setDesde(e.target.value); }} style={filtroStyle} />
+          <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Hasta</span>
+          <input type="date" value={hasta} onChange={function(e) { if (e.target.value) setHasta(e.target.value); }} style={filtroStyle} />
+          <select value={sucFiltro} onChange={function(e) { setSucFiltro(e.target.value); }} style={filtroStyle}>
+            <option value="">Todas las sucursales</option>
+            {sucursales.map(function(s) { return <option key={s.id} value={s.id}>{s.nombre}</option>; })}
+          </select>
+        </div>
+        {desde > hasta && <div style={{ marginTop: 8, color: "#e74c3c", fontSize: 12, fontWeight: 700 }}>⚠️ La fecha "Desde" es posterior a "Hasta".</div>}
+      </Card>
+
+      {/* Sub-módulos */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {SUBS.map(function(t) {
+          return (
+            <button key={t.key} onClick={function() { setSub(t.key); }}
+              style={{ padding: "8px 18px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 13, fontFamily: "Nunito, sans-serif",
+                background: sub === t.key ? C.violeta : C.violetaPale, color: sub === t.key ? "white" : C.violeta,
+                boxShadow: sub === t.key ? "0 4px 12px rgba(91,45,142,0.3)" : "none" }}>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 13, color: "#888", fontWeight: 700, marginBottom: 12 }}>{nombreScope} · {labelPeriodo}</div>
+
+      {/* ═══ RESUMEN ═══ */}
+      {sub === "resumen" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <StatCard label="Ventas" value={fmt(Math.round(K.ingresos))} sub={K.tickets + " tickets"} color="#2980b9" icon="💰" variacion={variacion(K.ingresos, KP.ingresos)} />
+            <StatCard label="Costo de ventas" value={fmt(Math.round(K.costos))} sub="Costo de lo vendido" color="#e74c3c" icon="🧾" variacion={null} />
+            <StatCard label="Ganancia bruta" value={fmt(Math.round(K.ganancia))} sub={"Margen " + (K.margen * 100).toFixed(1) + "%"} color="#27ae60" icon="📈" variacion={variacion(K.ganancia, KP.ganancia)} />
+            <StatCard label="Ticket promedio" value={fmt(Math.round(K.ticketProm))} sub={K.tickets + " ventas"} color={C.violeta} icon="🎟️" variacion={variacion(K.ticketProm, KP.ticketProm)} />
+            <StatCard label="Tickets" value={K.tickets} sub={"Ø " + (K.tickets / largo).toFixed(1) + " por día"} color="#e67e22" icon="🧮" variacion={variacion(K.tickets, KP.tickets)} />
+            {totalKg > 0 && <StatCard label="Kg vendidos" value={totalKg.toFixed(2) + " kg"} sub="Helado vendido" color="#7d3c98" icon="⚖️" variacion={null} />}
+            {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub={"Después de " + fmt(Math.round(cfScope.total)) + " de costos fijos"} color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
+          </div>
+          <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con los {largo} día(s) anteriores ({fechaLegible(prevDesde)} al {fechaLegible(prevHasta)}).</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 }}>
+            <Card>
+              <h4 style={{ margin: "0 0 14px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Por forma de pago</h4>
+              {[
+                { key: "efectivo", label: "💵 Efectivo", color: "#27ae60" },
+                { key: "tarjeta", label: "💳 Tarjeta / Débito", color: "#2980b9" },
+                { key: "qr", label: "📱 QR / Transferencia", color: C.violeta },
+                { key: "consumo", label: "👤 Consumo empleado", color: "#7d3c98" },
+                { key: "mixto", label: "🔀 Pago mixto", color: "#e67e22" },
+              ].map(function(fp) {
+                const t = porPago[fp.key] || 0;
+                const pct = K.ingresos > 0 ? (t / K.ingresos) * 100 : 0;
+                return (
+                  <div key={fp.key} style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700 }}>{fp.label}</span>
+                      <span style={{ fontWeight: 900, color: fp.color }}>{fmt(Math.round(t))} <span style={{ color: "#aaa", fontSize: 11 }}>({pct.toFixed(0)}%)</span></span>
+                    </div>
+                    <div style={{ background: C.violetaPale, borderRadius: 6, height: 8 }}>
+                      <div style={{ width: pct + "%", background: fp.color, borderRadius: 6, height: "100%" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+            <Card>
+              <h4 style={{ margin: "0 0 14px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>🏆 Top 5 productos (por ingresos)</h4>
+              {top5.length === 0 && <div style={{ color: "#bbb", fontSize: 13 }}>Sin ventas en el período</div>}
+              {top5.map(function(p, i) {
+                const pct = K.ingresos > 0 ? (p.ingresos / K.ingresos) * 100 : 0;
+                return (
+                  <div key={p.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < top5.length - 1 ? "1px solid " + C.violetaPale : "none", fontSize: 14 }}>
+                    <span style={{ fontWeight: 800, color: C.dark }}>{i + 1}. {p.nombre} <span style={{ color: "#aaa", fontSize: 11, fontWeight: 700 }}>× {p.cantidad}</span></span>
+                    <span style={{ fontWeight: 900, color: "#2980b9" }}>{fmt(Math.round(p.ingresos))} <span style={{ color: "#aaa", fontSize: 11 }}>({pct.toFixed(0)}%)</span></span>
+                  </div>
+                );
+              })}
+            </Card>
+          </div>
+
+          {!sucFiltro && sucursales.length > 1 && (
+            <Card style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ padding: "14px 20px", background: C.violetaPale }}>
+                <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Comparativo por sucursal</h4>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: C.crema }}>
+                    {["Sucursal", "Ventas", "% del total", "Tickets", "Ticket prom.", "Ganancia", "Margen"].map(function(h, i) {
+                      return <th key={h} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sucursales.map(function(s, i) {
+                    const k = calc(ventas0(s.id));
+                    return (
+                      <tr key={s.id} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 800 }}>{s.nombre}</td>
+                        <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(k.ingresos))}</td>
+                        <td style={tdN}>{kTodas.ingresos > 0 ? ((k.ingresos / kTodas.ingresos) * 100).toFixed(0) : 0}%</td>
+                        <td style={tdN}>{k.tickets}</td>
+                        <td style={tdN}>{fmt(Math.round(k.ticketProm))}</td>
+                        <td style={Object.assign({}, tdN, { color: "#27ae60", fontWeight: 800 })}>{fmt(Math.round(k.ganancia))}</td>
+                        <td style={tdN}>{(k.margen * 100).toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </Card>
+          )}
+
+          <Card style={{ marginBottom: 16 }}>
+            <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>{serieDias.titulo}</h4>
+            {serieDias.items.length > 0 ? <BarrasSimple items={serieDias.items} color={C.violetaMed} formato={function(v) { return fmt(Math.round(v)); }} /> : <div style={{ color: "#bbb", fontSize: 13 }}>Sin ventas en el período</div>}
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+            <Card>
+              <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Promedio por día de la semana</h4>
+              <BarrasSimple items={serieDow} color="#e67e22" formato={function(v) { return fmt(Math.round(v)); }} />
+            </Card>
+            <Card>
+              <h4 style={{ margin: "0 0 10px", color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Ventas por hora</h4>
+              {serieHora.length > 0 ? <BarrasSimple items={serieHora} color="#27ae60" formato={function(v) { return fmt(Math.round(v)); }} /> : <div style={{ color: "#bbb", fontSize: 13 }}>Sin datos</div>}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ PRODUCTOS ═══ */}
+      {sub === "productos" && (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", background: C.violetaPale, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Productos vendidos ({productosOrdenados.length})</h4>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input value={busqueda} onChange={function(e) { setBusqueda(e.target.value); }} placeholder="🔍 Buscar producto" style={filtroStyle} />
+              <button onClick={exportarProductos} style={{ padding: "8px 16px", borderRadius: 10, border: "2px solid " + C.violeta, background: "white", color: C.violeta, fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Nunito, sans-serif" }}>📤 Excel</button>
+            </div>
+          </div>
+          {productosOrdenados.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: "#bbb", fontWeight: 700 }}>Sin ventas en el período</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
+              <thead>
+                <tr style={{ background: C.crema }}>
+                  {th("nombre", "Producto", 0)}{th("cantidad", "Cant.", 1)}{th("ingresos", "Ingresos", 2)}
+                  <th style={{ padding: "10px 14px", textAlign: "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>% Ingr.</th>
+                  {th("costos", "Costos", 4)}{th("ganancia", "Ganancia", 5)}{th("margen", "Margen", 6)}
+                </tr>
+              </thead>
+              <tbody>
+                {productosOrdenados.map(function(p, i) {
+                  const gan = p.ingresos - p.costos;
+                  const marg = p.ingresos > 0 ? (gan / p.ingresos) * 100 : 0;
+                  return (
+                    <tr key={p.nombre} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 800, color: C.dark }}>{p.nombre}</td>
+                      <td style={Object.assign({}, tdN, { fontWeight: 700 })}>{p.cantidad}</td>
+                      <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(p.ingresos))}</td>
+                      <td style={Object.assign({}, tdN, { color: "#888" })}>{K.ingresos > 0 ? ((p.ingresos / K.ingresos) * 100).toFixed(1) : 0}%</td>
+                      <td style={Object.assign({}, tdN, { color: "#e74c3c", fontWeight: 700 })}>{fmt(Math.round(p.costos))}</td>
+                      <td style={Object.assign({}, tdN, { color: "#27ae60", fontWeight: 900 })}>{fmt(Math.round(gan))}</td>
+                      <td style={tdN}>
+                        <span style={{ background: marg >= 50 ? C.mentaPale : C.amarilloLight, color: marg >= 50 ? "#2a7a5e" : "#8a6500", padding: "3px 10px", borderRadius: 10, fontWeight: 800, fontSize: 12 }}>{marg.toFixed(0)}%</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: C.violetaPale, fontWeight: 900 }}>
+                  <td style={{ padding: "10px 14px", color: C.violeta }}>TOTAL</td>
+                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{productosOrdenados.reduce(function(s, p) { return s + p.cantidad; }, 0)}</td>
+                  <td style={Object.assign({}, tdN, { color: "#2980b9" })}>{fmt(Math.round(productosOrdenados.reduce(function(s, p) { return s + p.ingresos; }, 0)))}</td>
+                  <td></td>
+                  <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(productosOrdenados.reduce(function(s, p) { return s + p.costos; }, 0)))}</td>
+                  <td style={Object.assign({}, tdN, { color: "#27ae60" })}>{fmt(Math.round(productosOrdenados.reduce(function(s, p) { return s + p.ingresos - p.costos; }, 0)))}</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {/* ═══ PUNTO DE EQUILIBRIO ═══ */}
+      {sub === "pe" && (
+        <div>
+          {!dbOk && (
+            <div style={{ background: "#fff8e1", borderRadius: 12, padding: "10px 16px", fontSize: 12, color: "#b8860b", fontWeight: 700, marginBottom: 12 }}>
+              ⚠️ No se encontró la tabla <b>costos_fijos</b> en Supabase: por ahora los costos fijos se guardan solo en este dispositivo. Una vez creada la tabla se sincronizan entre dispositivos.
+            </div>
+          )}
+          {errGuardado && <div style={{ background: "#fdecea", borderRadius: 12, padding: "10px 16px", fontSize: 12, color: "#c0392b", fontWeight: 700, marginBottom: 12 }}>{errGuardado}</div>}
+
+          {/* Carga de costos fijos */}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>📋 Costos fijos mensuales</h4>
+              <input type="month" value={mesEdit} onChange={function(e) { if (e.target.value) setMesEdit(e.target.value); }} style={filtroStyle} />
+            </div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>
+              Cargá el costo fijo de cada sucursal y los gastos generales (los que no son de un local). Si un mes no tiene valor cargado, se repite el último mes cargado. Para períodos parciales se prorratea por días.
+            </div>
+            {sidsEdit.map(function(sid) {
+              const key = mesEdit + "|" + sid;
+              const r = cfDe(mesEdit, sid);
+              const valor = cfInputs[key] !== undefined ? cfInputs[key] : (cfMap[key] !== undefined ? String(cfMap[key]) : "");
+              const guardar = function() { if (cfInputs[key] !== undefined && cfInputs[key] !== "") guardarCFMes(mesEdit, sid, cfInputs[key]); };
+              return (
+                <div key={sid} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 180px", fontWeight: 800, fontSize: 14, color: C.dark }}>{nombreSid(sid)}</div>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: "#e74c3c" }}>$</span>
+                  <input type="number" min="0" value={valor}
+                    placeholder={r.heredado ? "↺ " + r.monto + " (de " + r.desdeMes + ")" : "Ej: 500000"}
+                    onChange={function(e) { const v = e.target.value; setCfInputs(function(prev) { const o = Object.assign({}, prev); o[key] = v; return o; }); }}
+                    onBlur={guardar}
+                    onKeyDown={function(e) { if (e.key === "Enter") { guardar(); e.target.blur(); } }}
+                    style={{ padding: "10px 14px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 16, fontFamily: "Nunito, sans-serif", fontWeight: 900, outline: "none", color: "#e74c3c", width: 170, boxSizing: "border-box" }} />
+                </div>
+              );
+            })}
+            <div style={{ borderTop: "2px solid " + C.violetaLight, marginTop: 8, paddingTop: 10, display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 16 }}>
+              <span style={{ color: C.violeta }}>Total costos fijos {mesEdit}</span>
+              <span style={{ color: "#e74c3c" }}>{fmt(Math.round(totalMesEdit))}</span>
+            </div>
+            <div style={{ fontSize: 11, color: "#aaa", marginTop: 6 }}>Escribí el monto y apretá Enter (o salí del campo) para guardar.</div>
+          </Card>
+
+          {/* Tabla por sucursal + total */}
+          <Card style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ padding: "14px 20px", background: C.violetaPale }}>
+              <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive" }}>Equilibrio por sucursal — {labelPeriodo}</h4>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
+              <thead>
+                <tr style={{ background: C.crema }}>
+                  {["", "Ventas", "Margen", "Costo fijo", "Punto de equilibrio", "Cobertura", "Resultado neto"].map(function(h, i) {
+                    return <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase" }}>{h}</th>;
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filasPE.map(function(f, i) {
+                  const cob = f.pe > 0 ? (f.ingresos / f.pe) * 100 : null;
+                  return (
+                    <tr key={f.nombre} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 800 }}>📍 {f.nombre}</td>
+                      <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(f.ingresos))}</td>
+                      <td style={tdN}>{(f.margen * 100).toFixed(1)}%</td>
+                      <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(f.cf))}</td>
+                      <td style={Object.assign({}, tdN, { fontWeight: 800 })}>{f.pe > 0 ? fmt(Math.round(f.pe)) : "—"}</td>
+                      <td style={Object.assign({}, tdN, { fontWeight: 800, color: cob === null ? "#bbb" : cob >= 100 ? "#27ae60" : cob >= 70 ? "#e67e22" : "#e74c3c" })}>{cob === null ? "—" : cob.toFixed(0) + "%"}</td>
+                      <td style={Object.assign({}, tdN, { fontWeight: 900, color: f.neto >= 0 ? "#27ae60" : "#e74c3c" })}>{fmt(Math.round(f.neto))}</td>
+                    </tr>
+                  );
+                })}
+                {cfGeneral > 0 && (
+                  <tr style={{ borderTop: "1px solid " + C.violetaPale }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 800 }}>🏢 Generales / compartidos</td>
+                    <td style={tdN}>—</td><td style={tdN}>—</td>
+                    <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(cfGeneral))}</td>
+                    <td style={tdN}>—</td><td style={tdN}>—</td>
+                    <td style={Object.assign({}, tdN, { fontWeight: 900, color: "#e74c3c" })}>{fmt(-Math.round(cfGeneral))}</td>
+                  </tr>
+                )}
+                <tr style={{ background: C.violetaPale, fontWeight: 900 }}>
+                  <td style={{ padding: "10px 14px", color: C.violeta }}>TOTAL</td>
+                  <td style={Object.assign({}, tdN, { color: "#2980b9" })}>{fmt(Math.round(kTodas.ingresos))}</td>
+                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{(kTodas.margen * 100).toFixed(1)}%</td>
+                  <td style={Object.assign({}, tdN, { color: "#e74c3c" })}>{fmt(Math.round(cfTotalTodas))}</td>
+                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{peTodas > 0 ? fmt(Math.round(peTodas)) : "—"}</td>
+                  <td style={Object.assign({}, tdN, { color: C.violeta })}>{peTodas > 0 ? ((kTodas.ingresos / peTodas) * 100).toFixed(0) + "%" : "—"}</td>
+                  <td style={Object.assign({}, tdN, { color: (kTodas.ganancia - cfTotalTodas) >= 0 ? "#27ae60" : "#e74c3c" })}>{fmt(Math.round(kTodas.ganancia - cfTotalTodas))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </Card>
+
+          {/* Detalle del alcance elegido en el filtro */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <StatCard label="Margen del período" value={(margenScope * 100).toFixed(1) + "%"} sub={nombreScope} color="#27ae60" icon="📈" variacion={null} />
+            <StatCard label="Costo fijo del período" value={fmt(Math.round(cfScope.total))} sub={enCurso ? "Mes completo" : "Prorrateado por días"} color="#e74c3c" icon="📋" variacion={null} />
+            <StatCard label="Punto de equilibrio" value={peScope > 0 ? fmt(Math.round(peScope)) : "—"} sub={peScope > 0 ? fmt(Math.round(cfScope.total)) + " ÷ " + (margenScope * 100).toFixed(1) + "%" : "Cargá costos fijos"} color={C.violeta} icon="⚖️" variacion={null} />
+            {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub="Ganancia bruta − costos fijos" color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
+          </div>
+          {cfScope.hereda && <div style={{ fontSize: 11, color: "#b8860b", fontWeight: 700, marginBottom: 12 }}>↺ Algún mes del período no tiene costo fijo cargado: se usó el del último mes cargado.</div>}
+
+          {peScope > 0 && (
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 16 }}>📈 Progreso — {nombreScope}</h4>
+                <div style={{ fontSize: 13, fontWeight: 800, color: colorProg }}>{fmt(Math.round(K.ingresos))} de {fmt(Math.round(peScope))}</div>
+              </div>
+              <div style={{ background: C.violetaPale, borderRadius: 12, height: 26, marginBottom: 10, overflow: "hidden" }}>
+                <div style={{ width: (progreso * 100).toFixed(1) + "%", height: "100%", background: colorProg, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10 }}>
+                  {progreso > 0.15 && <span style={{ color: "white", fontWeight: 900, fontSize: 12 }}>{(progreso * 100).toFixed(0)}%</span>}
+                </div>
+              </div>
+              <div style={{ background: bgProg, borderRadius: 10, padding: "9px 14px", marginBottom: 14, fontWeight: 800, color: colorProg, fontSize: 13 }}>
+                {K.ingresos >= peScope ? "🎉 ¡Superaste el PE! +" + fmt(Math.round(K.ingresos - peScope)) : "Faltan " + fmt(Math.round(peScope - K.ingresos)) + " para cubrir los costos fijos"}
+                {enCurso && proyeccion > 0 && <span style={{ fontWeight: 700, color: "#888" }}> · Proyección fin de mes: {fmt(Math.round(proyeccion))} {proyeccion >= peScope ? "✅" : "⚠️"}</span>}
+              </div>
+              {serieAcum.length >= 2 && (
+                <div style={{ background: "white", borderRadius: 10, padding: "10px 6px 4px" }}>
+                  <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#aaa", marginBottom: 6, paddingLeft: 6, flexWrap: "wrap" }}>
+                    <span><span style={{ color: colorProg, fontWeight: 800 }}>─</span> Ventas acumuladas</span>
+                    <span><span style={{ color: "#e74c3c", fontWeight: 800 }}>- -</span> Punto de equilibrio</span>
+                    {enCurso && <span><span style={{ color: colorProg, fontWeight: 800, opacity: 0.5 }}>····</span> Proyección</span>}
+                  </div>
+                  <PEChart pe={peScope} ventasMesTotal={K.ingresos} diasMes={serieAcum} diaActual={serieAcum.length} diasEnMes={enCurso ? diasMesActual : serieAcum.length} colorProgreso={colorProg} />
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ─── TAB CAJA (ADMIN) ─────────────────────────────────────────────────────────
 function TabCaja({ data }) {
   const [filtroFecha, setFiltroFecha] = useState(hoy());
@@ -3851,6 +4516,41 @@ function TabCaja({ data }) {
   return (
     <div>
       <SectionTitle>Caja</SectionTitle>
+
+      {/* Estado en vivo por sucursal */}
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${data.sucursales.length}, 1fr)`, gap:12, marginBottom:16 }}>
+        {data.sucursales.map((s) => {
+          const cajaAbierta = data.cajas.find(c => c.sucursalId === s.id && !c.cerrada);
+          return (
+            <Card key={s.id} style={{
+              padding:"16px 18px",
+              borderLeft: `5px solid ${cajaAbierta ? "#27ae60" : "#c0392b"}`,
+              display:"flex", alignItems:"center", gap:14,
+            }}>
+              <div style={{ fontSize:28 }}>{cajaAbierta ? "🟢" : "🔴"}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:800, color:C.dark, fontSize:15 }}>{s.nombre}</div>
+                {cajaAbierta ? (
+                  <>
+                    <div style={{ fontSize:13, color:"#27ae60", fontWeight:800 }}>Abierta</div>
+                    <div style={{ fontSize:12, color:"#888", marginTop:2 }}>
+                      👤 {cajaAbierta.usuarioNombre} · desde las {cajaAbierta.horaApertura}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize:13, color:"#c0392b", fontWeight:800 }}>Cerrada — sin operar</div>
+                )}
+              </div>
+              {cajaAbierta && (
+                <button onClick={() => setCajaSeleccionada(cajaAbierta)}
+                  style={{ padding:"6px 12px", borderRadius:10, border:`2px solid ${C.violetaLight}`, background:C.blanco, color:C.violeta, fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:"Nunito, sans-serif" }}>
+                  Ver
+                </button>
+              )}
+            </Card>
+          );
+        })}
+      </div>
 
       {/* Filtros */}
       <Card style={{ marginBottom:16, padding:"14px 18px" }}>
