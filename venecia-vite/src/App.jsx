@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://eusshllmrdwsudpskglz.supabase.co'
@@ -106,6 +106,8 @@ async function cargarDatos() {
       horaApertura: c.hora_apertura,
       horaCierre: c.hora_cierre,
       montoInicial: c.monto_inicial || 0,
+      sucursalId: c.sucursal_id,
+      usuarioId: c.usuario_id,
     }; }),
     ventas: (ventas || []).map(v => ({
       ...v,
@@ -183,16 +185,37 @@ async function guardarCaja(caja) {
 }
 
 async function cerrarCaja(id, horaCierre, usuarioId, sucursalId) {
-  // Cerrar por id primero
-  await supabase.from('cajas').update({
-    hora_cierre: horaCierre,
-    cerrada: true,
-  }).eq('id', Number(id));
-  // Además cerrar cualquier caja abierta de esa sucursal por seguridad
-  await supabase.from('cajas').update({
-    hora_cierre: horaCierre,
-    cerrada: true,
-  }).eq('sucursal_id', sucursalId).eq('cerrada', false);
+  // Devuelve { ok, error }. Antes los errores se ignoraban y la caja podia quedar abierta sin avisar.
+  try {
+    var r1 = await supabase.from('cajas').update({
+      hora_cierre: horaCierre,
+      cerrada: true,
+    }).eq('id', Number(id));
+    if (r1.error) return { ok: false, error: r1.error.message || String(r1.error) };
+    // Cerrar tambien cualquier otra caja abierta de esa sucursal (duplicados viejos)
+    var r2 = await supabase.from('cajas').update({
+      hora_cierre: horaCierre,
+      cerrada: true,
+    }).eq('sucursal_id', sucursalId).eq('cerrada', false);
+    if (r2.error) console.error("Error cerrando cajas duplicadas:", r2.error);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e && e.message) || String(e) };
+  }
+}
+
+// Consulta liviana: cajas abiertas de una sucursal (sin descargar todas las ventas)
+async function buscarCajasAbiertas(sucursalId) {
+  var r = await supabase.from('cajas').select('*').eq('sucursal_id', sucursalId).eq('cerrada', false).order('id', { ascending: true });
+  if (r.error) throw new Error(r.error.message || "No se pudo consultar las cajas");
+  return r.data || [];
+}
+
+// Caja cerrada hoy por este usuario en esta sucursal (para avisar antes de reabrir)
+async function buscarCajaCerradaHoy(sucursalId, usuarioId, fecha) {
+  var r = await supabase.from('cajas').select('id,hora_apertura,hora_cierre').eq('sucursal_id', sucursalId).eq('usuario_id', usuarioId).eq('fecha', fecha).eq('cerrada', true).order('id', { ascending: false }).limit(1);
+  if (r.error || !r.data || !r.data.length) return null;
+  return r.data[0];
 }
 
 async function guardarRetiro(retiro) {
@@ -866,7 +889,7 @@ function TicketCierre({ caja, sucursal, onClose }) {
 }
 
 // ─── APERTURA DE CAJA ─────────────────────────────────────────────────────────
-function AperturaCaja({ sesion, onAbrir, data }) {
+function AperturaCaja({ sesion, onAbrir, data, abriendo }) {
   const [monto, setMonto] = useState("");
 
   // Verificar si hay otra caja abierta en esta sucursal (datos frescos desde Supabase vía data)
@@ -877,6 +900,7 @@ function AperturaCaja({ sesion, onAbrir, data }) {
   });
 
   const abrir = function() {
+    if (abriendo) return;
     onAbrir(Number(monto) || 0);
   };
 
@@ -937,14 +961,14 @@ function AperturaCaja({ sesion, onAbrir, data }) {
           <p style={{ fontSize:11, color:"#aaa", textAlign:"center", marginTop:6 }}>Dejalo en $0 si no tenés fondo inicial</p>
         </div>
 
-        <button onClick={abrir} style={{
-          width:"100%", padding:"14px", borderRadius:14, border:"none",
+        <button onClick={abrir} disabled={!!abriendo} style={{
+          width:"100%", padding:"14px", borderRadius:14, border:"none", opacity: abriendo ? 0.6 : 1,
           background:`linear-gradient(135deg, ${C.violeta}, ${C.violetaMed})`,
-          color:"#fff", fontWeight:900, fontSize:16, cursor:"pointer",
+          color:"#fff", fontWeight:900, fontSize:16, cursor: abriendo ? "wait" : "pointer",
           fontFamily:"Baloo 2, cursive", letterSpacing:0.5,
           boxShadow:`0 6px 20px rgba(91,45,142,0.4)`,
         }}>
-          Abrir caja y comenzar turno 🍦
+          {abriendo ? "Abriendo caja... ⏳" : "Abrir caja y comenzar turno 🍦"}
         </button>
       </div>
     </div>
@@ -1114,6 +1138,7 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const [empleadaConsumoId, setEmpleadaConsumoId] = useState(null); // quien consume
   const [empleadaConsumoNombre, setEmpleadaConsumoNombre] = useState("");
   const [catActiva, setCatActiva] = useState(function(){ return (data.categorias && data.categorias[0]) ? data.categorias[0].key : "productos"; });
+  const cerrandoRef = useRef(false);
   const [mostrarCierre, setMostrarCierre] = useState(false);
   const [ticketCierre, setTicketCierre] = useState(null);
   const [mostrarCorte, setMostrarCorte] = useState(false);
@@ -1281,10 +1306,13 @@ function POS({ data, setData, sesion, caja, onCerrarCaja, onLogout }) {
   const handleCerrarCaja = async function() {
     const horaCierre = ahora();
     const cajaCerrada = { ...caja, horaCierre, cerrada: true, ventas: ventasCaja };
-    try {
-      await cerrarCaja(caja.id, horaCierre, sesion.usuario.id, sesion.sucursal.id);
-    } catch(e) {
-      console.error("Error cerrando caja:", e);
+    if (cerrandoRef.current) return;
+    cerrandoRef.current = true;
+    var rc = await cerrarCaja(caja.id, horaCierre, sesion.usuario.id, sesion.sucursal.id);
+    if (!rc.ok) {
+      cerrandoRef.current = false;
+      alert("No se pudo cerrar la caja en el sistema. Revisá la conexión e intentá de nuevo.\n\n" + (rc.error || ""));
+      return;
     }
     setData(function(prev) {
       return { ...prev, cajas: prev.cajas.map(function(c) { return c.id === caja.id ? { ...c, hora_cierre: horaCierre, cerrada: true } : c; }) };
@@ -2129,6 +2157,7 @@ function Admin({ data, setData, onLogout }) {
     { key: "ventas", icon: "📋", label: "Ventas" },
     { key: "resultados", icon: "💰", label: "Resultados" },
     { key: "reportes", icon: "📈", label: "Reportes" },
+    { key: "ticketprom", icon: "🎟️", label: "Ticket promedio" },
     { key: "caja", icon: "🏪", label: "Caja" },
     { key: "consumos", icon: "👤", label: "Consumos" },
     { key: "consumidores", icon: "🧑‍🤝‍🧑", label: "Consumidores" },
@@ -2258,6 +2287,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "ventas" && <TabVentas data={data} setData={setData} />}
           {tab === "resultados" && <TabResultados data={data} />}
           {tab === "reportes" && <TabReportes data={data} />}
+          {tab === "ticketprom" && <TabTicketPromedio data={data} />}
           {tab === "caja" && <TabCaja data={data} />}
           {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
           {tab === "consumidores" && <TabConsumidores data={data} setData={setData} />}
@@ -2349,7 +2379,11 @@ function Dashboard({ data }) {
   const ventasAnt = ventasSuc.filter(v => v.fecha >= desdeAntStr && v.fecha <= hastaAntStr);
   const brutoAnt = ventasAnt.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
   const gananciaAnt = brutoAnt - ventasAnt.reduce((s,v) => s + v.costo_total, 0);
-  const ticketAnt = ventasAnt.length > 0 ? Math.round(brutoAnt / ventasAnt.length) : 0;
+  const brutoDe = (vs) => vs.reduce((s,v) => s + (v.items || []).reduce((a,i) => a + (i.subtotal || 0), 0), 0);
+  const genAct = ventasFiltradas.filter(v => v.formaPago !== "consumo" && Number(v.total) > 0);
+  const genAnt = ventasAnt.filter(v => v.formaPago !== "consumo" && Number(v.total) > 0);
+  const ticketAct = genAct.length > 0 ? Math.round(brutoDe(genAct) / genAct.length) : 0;
+  const ticketAnt = genAnt.length > 0 ? Math.round(brutoDe(genAnt) / genAnt.length) : 0;
   const variacion = (actual, anterior) => {
     if (anterior === 0) return null;
     const pct = ((actual - anterior) / anterior * 100).toFixed(0);
@@ -2357,7 +2391,7 @@ function Dashboard({ data }) {
   };
   const varTotal    = variacion(brutoPeriodo, brutoAnt);
   const varGanancia = variacion(gananciaPeriodo, gananciaAnt);
-  const varTicket   = variacion(ventasFiltradas.length > 0 ? Math.round(brutoPeriodo/ventasFiltradas.length) : 0, ticketAnt);
+  const varTicket   = variacion(ticketAct, ticketAnt);
   const varTx       = variacion(ventasFiltradas.length, ventasAnt.length);
 
   const porSucursal = data.sucursales.map(s => {
@@ -2451,7 +2485,7 @@ function Dashboard({ data }) {
         <StatCard label="Total vendido"   value={fmt(totalPeriodo)}    sub={`${ventasFiltradas.length} transacciones`} color={C.violeta} icon="🍦" variacion={varTotal} />
         <StatCard label="Costo de ventas" value={fmt(costoPeriodo)}    sub="Mercadería vendida"  color="#e74c3c" icon="📦" />
         <StatCard label="Ganancia bruta"  value={fmt(gananciaPeriodo)} sub={`Margen: ${margenPeriodo}%`} color="#27ae60" icon="💰" variacion={varGanancia} />
-        <StatCard label="Ticket promedio" value={ventasFiltradas.length > 0 ? fmt(Math.round(totalPeriodo/ventasFiltradas.length)) : "$0"} sub="Por venta" color="#2980b9" icon="🧾" variacion={varTicket} />
+        <StatCard label="Ticket promedio" value={fmt(ticketAct)} sub="Sin consumo de empleado" color="#2980b9" icon="🧾" variacion={varTicket} />
       </div>
 
       {/* Gráfico por día — solo si hay más de 1 día */}
@@ -3881,7 +3915,7 @@ function TabReportes({ data }) {
     const ingresos = vs.reduce(function(s, v) { return s + v.total; }, 0);
     const costos = vs.reduce(function(s, v) { return s + (v.costo_total || 0); }, 0);
     const ganancia = ingresos - costos;
-    return { ingresos: ingresos, costos: costos, ganancia: ganancia, margen: ingresos > 0 ? ganancia / ingresos : 0, tickets: vs.length, ticketProm: vs.length > 0 ? ingresos / vs.length : 0 };
+    return { ingresos: ingresos, costos: costos, ganancia: ganancia, margen: ingresos > 0 ? ganancia / ingresos : 0, tickets: vs.length, ticketProm: (function() { const g = vs.filter(function(v) { return v.formaPago !== "consumo" && Number(v.total) > 0; }); return g.length > 0 ? g.reduce(function(s, v) { return s + v.total; }, 0) / g.length : 0; })() };
   };
   const K = calc(ventas);
   const KP = calc(ventasPrev);
@@ -3969,15 +4003,16 @@ function TabReportes({ data }) {
     ventas.forEach(function(v) {
       const h = parseInt(String(v.hora || "").slice(0, 2), 10);
       if (isNaN(h)) return;
-      if (!mapa[h]) mapa[h] = { hora: h, tickets: 0, ventas: 0, porSuc: {} };
+      if (!mapa[h]) mapa[h] = { hora: h, tickets: 0, ventas: 0, tv: 0, vv: 0, porSuc: {} };
       mapa[h].tickets++;
+      if (v.formaPago !== "consumo" && Number(v.total) > 0) { mapa[h].tv++; mapa[h].vv += v.total; }
       mapa[h].ventas += v.total;
       mapa[h].porSuc[v.sucursal_id] = (mapa[h].porSuc[v.sucursal_id] || 0) + v.total;
     });
     const hs = Object.keys(mapa).map(Number);
     if (hs.length === 0) return [];
     const out = [];
-    for (let h = Math.min.apply(null, hs); h <= Math.max.apply(null, hs); h++) out.push(mapa[h] || { hora: h, tickets: 0, ventas: 0, porSuc: {} });
+    for (let h = Math.min.apply(null, hs); h <= Math.max.apply(null, hs); h++) out.push(mapa[h] || { hora: h, tickets: 0, ventas: 0, tv: 0, vv: 0, porSuc: {} });
     return out;
   })();
 
@@ -4101,7 +4136,7 @@ function TabReportes({ data }) {
             <StatCard label="Ventas" value={fmt(Math.round(K.ingresos))} sub={K.tickets + " tickets"} color="#2980b9" icon="💰" variacion={variacion(K.ingresos, KP.ingresos)} />
             <StatCard label="Costo de ventas" value={fmt(Math.round(K.costos))} sub="Costo de lo vendido" color="#e74c3c" icon="🧾" variacion={null} />
             <StatCard label="Ganancia bruta" value={fmt(Math.round(K.ganancia))} sub={"Margen " + (K.margen * 100).toFixed(0) + "%"} color="#27ae60" icon="📈" variacion={variacion(K.ganancia, KP.ganancia)} />
-            <StatCard label="Ticket promedio" value={fmt(Math.round(K.ticketProm))} sub={K.tickets + " ventas"} color={C.violeta} icon="🎟️" variacion={variacion(K.ticketProm, KP.ticketProm)} />
+            <StatCard label="Ticket promedio" value={fmt(Math.round(K.ticketProm))} sub="Sin consumo de empleado ni $0" color={C.violeta} icon="🎟️" variacion={variacion(K.ticketProm, KP.ticketProm)} />
             <StatCard label="Tickets" value={K.tickets} sub={"Ø " + (K.tickets / largo).toFixed(0) + " por día"} color="#e67e22" icon="🧮" variacion={variacion(K.tickets, KP.tickets)} />
             {totalKg > 0 && <StatCard label="Kg vendidos" value={totalKg.toFixed(2) + " kg"} sub="Helado vendido" color="#7d3c98" icon="⚖️" variacion={null} />}
             {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub={"Después de " + fmt(Math.round(cfScope.total)) + " de costos fijos"} color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
@@ -4219,7 +4254,7 @@ function TabReportes({ data }) {
                         <td style={tdN}>{r.tickets}</td>
                         <td style={Object.assign({}, tdN, { color: "#2980b9", fontWeight: 800 })}>{fmt(Math.round(r.ventas))}</td>
                         <td style={tdN}>{K.ingresos > 0 ? ((r.ventas / K.ingresos) * 100).toFixed(0) : 0}%</td>
-                        <td style={tdN}>{r.tickets > 0 ? fmt(Math.round(r.ventas / r.tickets)) : "—"}</td>
+                        <td style={tdN}>{r.tv > 0 ? fmt(Math.round(r.vv / r.tv)) : "—"}</td>
                         {!sucFiltro && sucursales.length > 1 && sucursales.map(function(s) { return <td key={s.id} style={tdN}>{fmt(Math.round(r.porSuc[s.id] || 0))}</td>; })}
                       </tr>
                     );
@@ -4427,6 +4462,300 @@ function TabReportes({ data }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─── TICKET PROMEDIO (incentivos) ────────────────────────────────────────────
+// Ventas genuinas: sin consumo de empleado y sin tickets de $0 (sorteos / regalos)
+const esVentaGenuina = (v) => v.formaPago !== "consumo" && Number(v.total) > 0;
+const esVentaPedidoYa = (v) => (v.items || []).some(function(i) { return /pedido\s*ya|p\.\s*ya/i.test(String(i.nombre || "")); });
+const mesesAtras = (n) => {
+  const out = [];
+  let y = Number(hoy().slice(0, 4)), m = Number(hoy().slice(5, 7));
+  for (let i = 0; i < n; i++) {
+    out.unshift(y + "-" + String(m).padStart(2, "0"));
+    m--; if (m < 1) { m = 12; y--; }
+  }
+  return out;
+};
+const mesAnteriorDe = (mes) => { let y = Number(mes.slice(0, 4)), m = Number(mes.slice(5, 7)) - 1; if (m < 1) { m = 12; y--; } return y + "-" + String(m).padStart(2, "0"); };
+const nombreMes = (mes) => ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"][Number(mes.slice(5, 7)) - 1] + " " + mes.slice(2, 4);
+
+function TabTicketPromedio({ data }) {
+  const sucursales = data.sucursales || [];
+  const hoyStr = hoy();
+  const [r0, r1] = rangoAtajo("mes");
+  const [desde, setDesde] = useState(r0);
+  const [hasta, setHasta] = useState(r1);
+  const [sucFiltro, setSucFiltro] = useState("");
+  const [empFiltro, setEmpFiltro] = useState("");
+  const [exclPY, setExclPY] = useState(true);
+  const [metrica, setMetrica] = useState("tp");
+  const [mesMeta, setMesMeta] = useState(hoyStr.slice(0, 7));
+  const [metaInput, setMetaInput] = useState("");
+  const [metaTick, setMetaTick] = useState(0);
+
+  // Cada venta genuina con su ticket revaluado a la lista de precios vigente (precios constantes)
+  const enriquecidas = useMemo(function() {
+    const porId = {}, porNombre = {};
+    (data.productos || []).forEach(function(p) { porId[p.id] = p; porNombre[p.nombre] = p; });
+    return (data.ventas || []).filter(esVentaGenuina).map(function(v) {
+      const items = v.items || [];
+      const sumSub = items.reduce(function(s, i) { return s + (Number(i.subtotal) || 0); }, 0);
+      const sumConst = items.reduce(function(s, i) {
+        const p = porId[i.id] || porNombre[i.nombre];
+        const precio = p ? Number(p.precio) : Number(i.precio) || 0;
+        return s + precio * (Number(i.cantidad) || 0);
+      }, 0);
+      const factor = sumSub > 0 ? Number(v.total) / sumSub : 1; // respeta descuentos aplicados en el POS
+      return {
+        fecha: v.fecha, mes: String(v.fecha).slice(0, 7), sid: v.sucursal_id, total: Number(v.total),
+        totalConst: sumConst * factor,
+        unidades: items.reduce(function(s, i) { return s + (Number(i.cantidad) || 0); }, 0),
+        py: esVentaPedidoYa(v),
+        uid: v.usuario_id, unombre: v.usuario_nombre || "Sin dato",
+      };
+    });
+  }, [data.ventas, data.productos]);
+
+  // Lista de empleados que registraron ventas (respeta la sucursal elegida)
+  const empleados = (function() {
+    const m = {};
+    enriquecidas.forEach(function(v) {
+      if (sucFiltro && v.sid !== Number(sucFiltro)) return;
+      const k = String(v.uid != null ? v.uid : v.unombre);
+      if (!m[k]) m[k] = v.unombre;
+    });
+    return Object.keys(m).map(function(k) { return { key: k, nombre: m[k] }; }).sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+  })();
+  const keyEmp = function(v) { return String(v.uid != null ? v.uid : v.unombre); };
+
+  const base = enriquecidas.filter(function(v) {
+    return (!sucFiltro || v.sid === Number(sucFiltro)) && (!exclPY || !v.py) && (!empFiltro || keyEmp(v) === empFiltro);
+  });
+  const stat = function(arr) {
+    const n = arr.length;
+    const ventas = arr.reduce(function(s, v) { return s + v.total; }, 0);
+    const vc = arr.reduce(function(s, v) { return s + v.totalConst; }, 0);
+    const un = arr.reduce(function(s, v) { return s + v.unidades; }, 0);
+    return { n: n, ventas: ventas, tp: n > 0 ? ventas / n : 0, tpc: n > 0 ? vc / n : 0, upt: n > 0 ? un / n : 0 };
+  };
+  const porMes = function(mes) { return stat(base.filter(function(v) { return v.mes === mes; })); };
+  const varPct = function(act, prev) { return prev > 0 ? ((act - prev) / prev) * 100 : null; };
+  const fmtVar = function(p) {
+    if (p === null) return <span style={{ color: "#ccc" }}>—</span>;
+    return <span style={{ color: p >= 0 ? "#27ae60" : "#e74c3c", fontWeight: 800 }}>{p >= 0 ? "▲ " : "▼ "}{Math.abs(p).toFixed(1)}%</span>;
+  };
+  const varBadge = function(act, prev) { const p = varPct(act, prev); return p === null ? null : { sube: p >= 0, pct: Math.abs(p).toFixed(1) }; };
+
+  // Período elegido y período anterior de igual duración
+  const largo = Math.max(diasEntre(desde, hasta), 1);
+  const S = stat(base.filter(function(v) { return v.fecha >= desde && v.fecha <= hasta; }));
+  const SP = stat(base.filter(function(v) { return v.fecha >= addDias(desde, -largo) && v.fecha <= addDias(desde, -1); }));
+
+  // Tabla mes a mes
+  const meses = mesesAtras(12);
+  const filasMes = meses.map(function(m) { return Object.assign({ mes: m }, porMes(m)); });
+
+  // Meta del incentivo
+  const claveMeta = "venecia_meta_tp_" + mesMeta + "_" + (sucFiltro || "todas") + (empFiltro ? "_emp" + empFiltro : "");
+  const metaGuardada = (function() { try { const x = localStorage.getItem(claveMeta); return x ? Number(x) : null; } catch (e) { return null; } })();
+  const mAct = porMes(mesMeta);
+  const mPrev = porMes(mesAnteriorDe(mesMeta));
+  const metaEfectiva = metaGuardada !== null ? metaGuardada : Math.round(mPrev.tp);
+  const guardarMeta = function() {
+    const n = Number(metaInput);
+    if (!isNaN(n) && n > 0) { try { localStorage.setItem(claveMeta, String(Math.round(n))); } catch (e) {} setMetaTick(metaTick + 1); }
+    setMetaInput("");
+  };
+  const pConst = varPct(mAct.tpc, mPrev.tpc);
+  const pTickets = varPct(mAct.n, mPrev.n);
+
+  const filtroStyle = { padding: "8px 12px", borderRadius: 10, border: "2px solid " + C.violetaLight, fontSize: 13, fontFamily: "Nunito, sans-serif", fontWeight: 600, color: C.dark, outline: "none", background: C.blanco };
+  const tdN = { padding: "10px 14px", textAlign: "right" };
+  const atajoActivo = (ATAJOS_REPORTE.find(function(a) { const r = rangoAtajo(a.key); return r[0] === desde && r[1] === hasta; }) || {}).key;
+  const labelPeriodo = desde === hasta ? fechaLegible(desde) : fechaLegible(desde) + " al " + fechaLegible(hasta);
+  const nombreEmp = empFiltro ? ((empleados.find(function(e) { return e.key === empFiltro; }) || {}).nombre || "") : "";
+  const nombreScope = (sucFiltro ? (sucursales.find(function(s) { return s.id === Number(sucFiltro); }) || {}).nombre : "Todas las sucursales") + (nombreEmp ? " · " + nombreEmp : "");
+
+  // Resumen por empleado del período (solo cuando no hay un empleado elegido)
+  const filasEmp = empleados.map(function(e) {
+    const arr = enriquecidas.filter(function(v) {
+      return keyEmp(v) === e.key && v.fecha >= desde && v.fecha <= hasta && (!sucFiltro || v.sid === Number(sucFiltro)) && (!exclPY || !v.py);
+    });
+    return Object.assign({ key: e.key, nombre: e.nombre }, stat(arr));
+  }).filter(function(f) { return f.n > 0; }).sort(function(a, b) { return b.tp - a.tp; });
+  const METRICAS = [{ key: "tp", label: "Ticket promedio" }, { key: "tpc", label: "A precios constantes" }, { key: "upt", label: "Unidades por ticket" }];
+  const fmtMetrica = function(v) { return metrica === "upt" ? Number(v).toFixed(2) : fmt(Math.round(v)); };
+
+  return (
+    <div>
+      <SectionTitle>Ticket promedio</SectionTitle>
+
+      <Card style={{ marginBottom: 16, padding: "14px 18px" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {ATAJOS_REPORTE.map(function(a) {
+            const act = atajoActivo === a.key;
+            return (
+              <button key={a.key} onClick={function() { const r = rangoAtajo(a.key); setDesde(r[0]); setHasta(r[1]); }}
+                style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "Nunito, sans-serif", background: act ? C.violeta : C.violetaPale, color: act ? "white" : C.violeta }}>
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Desde</span>
+          <input type="date" value={desde} onChange={function(e) { if (e.target.value) setDesde(e.target.value); }} style={filtroStyle} />
+          <span style={{ fontSize: 12, color: C.violetaMed, fontWeight: 700 }}>Hasta</span>
+          <input type="date" value={hasta} onChange={function(e) { if (e.target.value) setHasta(e.target.value); }} style={filtroStyle} />
+          <select value={sucFiltro} onChange={function(e) { setSucFiltro(e.target.value); }} style={filtroStyle}>
+            <option value="">Todas las sucursales</option>
+            {sucursales.map(function(s) { return <option key={s.id} value={s.id}>{s.nombre}</option>; })}
+          </select>
+          <select value={empFiltro} onChange={function(e) { setEmpFiltro(e.target.value); }} style={filtroStyle}>
+            <option value="">Todos los empleados</option>
+            {empleados.map(function(e) { return <option key={e.key} value={e.key}>{e.nombre}</option>; })}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: C.dark, cursor: "pointer" }}>
+            <input type="checkbox" checked={exclPY} onChange={function(e) { setExclPY(e.target.checked); }} /> Excluir Pedido Ya
+          </label>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 11, color: "#888" }}>
+          Siempre excluye: consumo de empleado y tickets de $0 (sorteos / regalos){exclPY ? ", y ventas de Pedido Ya" : ""}.
+        </div>
+      </Card>
+
+      <div style={{ fontSize: 13, color: "#888", fontWeight: 700, marginBottom: 12 }}>{nombreScope} · {labelPeriodo}</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 8 }}>
+        <StatCard label="Ticket promedio" value={fmt(Math.round(S.tp))} sub={S.n + " ventas"} color={C.violeta} icon="🎟️" variacion={varBadge(S.tp, SP.tp)} />
+        <StatCard label="A precios constantes" value={fmt(Math.round(S.tpc))} sub="Sin efecto de aumentos" color="#2980b9" icon="⚖️" variacion={varBadge(S.tpc, SP.tpc)} />
+        <StatCard label="Unidades por ticket" value={S.upt.toFixed(2)} sub="Productos por venta" color="#e67e22" icon="🧮" variacion={varBadge(S.upt, SP.upt)} />
+        <StatCard label="Ventas del período" value={fmt(Math.round(S.ventas))} sub={S.n + " tickets"} color="#27ae60" icon="💰" variacion={varBadge(S.ventas, SP.ventas)} />
+      </div>
+      <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con los {largo} día(s) anteriores ({fechaLegible(addDias(desde, -largo))} al {fechaLegible(addDias(desde, -1))}).</div>
+
+      {!empFiltro && filasEmp.length > 0 && (
+        <Card style={{ marginBottom: 16, padding: 0, overflowX: "auto" }}>
+          <div style={{ padding: "12px 16px 4px", fontWeight: 800, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 16 }}>👥 Por empleado — {labelPeriodo}</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: C.violetaPale, color: C.violeta, fontSize: 11, textTransform: "uppercase" }}>
+                <th style={{ padding: "8px 14px", textAlign: "left" }}>Empleado</th>
+                <th style={{ padding: "8px 14px", textAlign: "right" }}>Tickets</th>
+                <th style={{ padding: "8px 14px", textAlign: "right" }}>Ticket prom.</th>
+                <th style={{ padding: "8px 14px", textAlign: "right" }}>Precios const.</th>
+                <th style={{ padding: "8px 14px", textAlign: "right" }}>Unid./ticket</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filasEmp.map(function(f) {
+                return (
+                  <tr key={f.key} onClick={function() { setEmpFiltro(f.key); }} style={{ borderTop: "1px solid " + C.violetaLight, cursor: "pointer" }}>
+                    <td style={{ padding: "9px 14px", fontWeight: 700 }}>{f.nombre}</td>
+                    <td style={tdN}>{f.n}</td>
+                    <td style={Object.assign({}, tdN, { fontWeight: 800, color: C.violeta })}>{fmt(Math.round(f.tp))}</td>
+                    <td style={tdN}>{fmt(Math.round(f.tpc))}</td>
+                    <td style={tdN}>{f.upt.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Incentivo */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>🏆 Incentivo del mes — {nombreScope}</h4>
+          <input type="month" value={mesMeta} onChange={function(e) { if (e.target.value) setMesMeta(e.target.value); }} style={filtroStyle} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: C.dark }}>Meta de ticket promedio:</span>
+          <span style={{ fontSize: 18, fontWeight: 900, color: C.violeta }}>{fmt(metaEfectiva)}</span>
+          <span style={{ fontSize: 11, color: "#aaa" }}>{metaGuardada !== null ? "(cargada a mano)" : "(= promedio del mes anterior)"}</span>
+          <input type="number" min="0" value={metaInput} placeholder="Cambiar meta"
+            onChange={function(e) { setMetaInput(e.target.value); }} onBlur={guardarMeta}
+            onKeyDown={function(e) { if (e.key === "Enter") { guardarMeta(); e.target.blur(); } }}
+            style={Object.assign({}, filtroStyle, { width: 130 })} />
+        </div>
+        {[
+          { t: "Ticket promedio vs meta", v: fmt(Math.round(mAct.tp)), ok: mAct.n > 0 && mAct.tp >= metaEfectiva, d: mAct.n > 0 ? (mAct.tp - metaEfectiva >= 0 ? "+" : "−") + fmt(Math.round(Math.abs(mAct.tp - metaEfectiva))) + " vs meta" : "Sin ventas" },
+          { t: "A precios constantes vs mes anterior ★", v: fmt(Math.round(mAct.tpc)), ok: pConst !== null && pConst > 0, d: pConst === null ? "Sin mes anterior" : (pConst >= 0 ? "+" : "−") + Math.abs(pConst).toFixed(1) + "% vs " + nombreMes(mesAnteriorDe(mesMeta)) },
+          { t: "Unidades por ticket vs mes anterior", v: mAct.upt.toFixed(2), ok: mPrev.upt > 0 && mAct.upt > mPrev.upt, d: mPrev.upt > 0 ? (mAct.upt >= mPrev.upt ? "+" : "−") + Math.abs(varPct(mAct.upt, mPrev.upt)).toFixed(1) + "% vs " + nombreMes(mesAnteriorDe(mesMeta)) : "Sin mes anterior" },
+        ].map(function(r) {
+          return (
+            <div key={r.t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderRadius: 10, marginBottom: 6, background: r.ok ? "#e8f8f1" : C.crema, flexWrap: "wrap", gap: 6 }}>
+              <span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{r.ok ? "✅" : "⏳"} {r.t}</span>
+              <span style={{ fontWeight: 900, color: r.ok ? "#27ae60" : C.violeta }}>{r.v} <span style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>· {r.d}</span></span>
+            </div>
+          );
+        })}
+        {pTickets !== null && pTickets < -10 && (
+          <div style={{ marginTop: 6, padding: "9px 12px", borderRadius: 10, background: "#fff3e0", color: "#b8860b", fontWeight: 700, fontSize: 12 }}>
+            ⚠️ La cantidad de tickets cayó {Math.abs(pTickets).toFixed(0)}% contra el mes anterior ({mAct.n} vs {mPrev.n}). Revisá que el ticket promedio no suba por vender a menos clientes.
+          </div>
+        )}
+        <div style={{ marginTop: 10, fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
+          ★ Indicador recomendado para pagar el incentivo: el <b>ticket a precios constantes</b> revalúa todas las ventas con la lista de precios de hoy, así solo sube si se vende más por cliente y no por aumentos. La meta se guarda en este dispositivo.
+        </div>
+      </Card>
+
+      {/* Mes a mes */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          <h4 style={{ margin: 0, color: C.violeta, fontFamily: "Baloo 2, cursive", fontSize: 17 }}>Mes a mes</h4>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {METRICAS.map(function(m) {
+              return (
+                <button key={m.key} onClick={function() { setMetrica(m.key); }}
+                  style={{ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 800, fontFamily: "Nunito, sans-serif", background: metrica === m.key ? C.violeta : C.violetaPale, color: metrica === m.key ? "white" : C.violeta }}>
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <BarrasSimple items={filasMes.map(function(f) { return { label: nombreMes(f.mes), value: f[metrica] }; })} color={C.violetaMed} formato={fmtMetrica} />
+      </Card>
+
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div className="tbl-scroll">
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: C.crema }}>
+                {["Mes", "Tickets", "Ventas", "Ticket prom.", "Var.", "A precios const.", "Var.", "Unid./ticket", "Var."].map(function(h, i) {
+                  return <th key={i} style={{ padding: "10px 14px", textAlign: i === 0 ? "left" : "right", color: C.violeta, fontWeight: 800, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {filasMes.slice().reverse().map(function(f, i, arr) {
+                const prev = arr[i + 1];
+                const enCurso = f.mes === hoyStr.slice(0, 7);
+                return (
+                  <tr key={f.mes} style={{ borderTop: "1px solid " + C.violetaPale, background: i % 2 === 0 ? C.blanco : C.crema }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 800, whiteSpace: "nowrap" }}>{nombreMes(f.mes)}{enCurso && <span style={{ fontSize: 10, color: "#e67e22", marginLeft: 6 }}>en curso</span>}</td>
+                    <td style={tdN}>{f.n}</td>
+                    <td style={Object.assign({}, tdN, { color: "#2980b9" })}>{fmt(Math.round(f.ventas))}</td>
+                    <td style={Object.assign({}, tdN, { fontWeight: 900, color: C.violeta })}>{f.n > 0 ? fmt(Math.round(f.tp)) : "—"}</td>
+                    <td style={tdN}>{prev && f.n > 0 ? fmtVar(varPct(f.tp, prev.tp)) : "—"}</td>
+                    <td style={Object.assign({}, tdN, { fontWeight: 800 })}>{f.n > 0 ? fmt(Math.round(f.tpc)) : "—"}</td>
+                    <td style={tdN}>{prev && f.n > 0 ? fmtVar(varPct(f.tpc, prev.tpc)) : "—"}</td>
+                    <td style={tdN}>{f.n > 0 ? f.upt.toFixed(2) : "—"}</td>
+                    <td style={tdN}>{prev && f.n > 0 ? fmtVar(varPct(f.upt, prev.upt)) : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#aaa" }}>Las variaciones de porcentaje muestran un decimal a propósito: en un incentivo, las diferencias chicas importan.</div>
     </div>
   );
 }
@@ -6536,6 +6865,9 @@ export default function App() {
           && c.sucursal_id === s.sucursal.id;
       });
       if (cajaExistente) {
+        if (cajaExistente.fecha && cajaExistente.fecha !== hoy()) {
+          alert("Atención: tenés una caja abierta desde el " + cajaExistente.fecha + " (" + cajaExistente.hora_apertura + "). Si es de un turno anterior, cerrala y abrí una nueva.");
+        }
         setCajaActiva({
           id: cajaExistente.id,
           usuarioId: cajaExistente.usuario_id,
@@ -6553,71 +6885,96 @@ export default function App() {
     }
   };
 
-  const handleAbrirCaja = async function(montoInicial) {
-    // Recargar datos frescos antes de abrir
-    var datosActuales = await cargarDatos();
-    setData(datosActuales);
+  const abriendoRef = useRef(false);
+  const [abriendo, setAbriendo] = useState(false);
 
-    // Verificar si ya tiene una caja abierta (datos frescos)
-    var yaExiste = datosActuales.cajas.find(function(c) {
-      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
-        && c.usuario_id === sesion.usuario.id
-        && c.sucursal_id === sesion.sucursal.id;
-    });
-    if (yaExiste) {
-      setCajaActiva({
-        id: yaExiste.id,
-        usuarioId: yaExiste.usuario_id,
-        usuarioNombre: yaExiste.usuario_nombre,
-        sucursalId: yaExiste.sucursal_id,
-        sucursalNombre: yaExiste.sucursal_nombre,
-        fecha: yaExiste.fecha,
-        horaApertura: yaExiste.hora_apertura,
-        montoInicial: yaExiste.monto_inicial || 0,
-        cerrada: false,
-      });
-      return;
-    }
-
-    // Verificar si hay otra caja abierta en la misma sucursal
-    var otraCaja = datosActuales.cajas.find(function(c) {
-      return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
-        && c.sucursal_id === sesion.sucursal.id
-        && c.usuario_id !== sesion.usuario.id;
-    });
-    if (otraCaja) {
-      alert("Hay una caja abierta por " + otraCaja.usuario_nombre + ". Pedile que cierre su caja primero.");
-      return;
-    }
-
-    // Crear nueva caja — sin pasar id, que Supabase genere uno
-    var nuevaCajaData = {
-      usuario_id: sesion.usuario.id,
-      usuario_nombre: sesion.usuario.nombre,
-      sucursal_id: sesion.sucursal.id,
-      sucursal_nombre: sesion.sucursal.nombre,
-      fecha: hoy(),
-      hora_apertura: ahora(),
-      hora_cierre: null,
-      monto_inicial: montoInicial || 0,
+  const cajaDesdeFila = function(cj) {
+    return {
+      id: cj.id,
+      usuarioId: cj.usuario_id,
+      usuarioNombre: cj.usuario_nombre,
+      sucursalId: cj.sucursal_id,
+      sucursalNombre: cj.sucursal_nombre,
+      fecha: cj.fecha,
+      horaApertura: cj.hora_apertura,
+      montoInicial: cj.monto_inicial || 0,
       cerrada: false,
     };
-    var res = await supabase.from('cajas').insert(nuevaCajaData).select().single();
-    if (res.data) {
-      var cj = res.data;
-      var nuevaCaja = {
-        id: cj.id,
-        usuarioId: cj.usuario_id,
-        usuarioNombre: cj.usuario_nombre,
-        sucursalId: cj.sucursal_id,
-        sucursalNombre: cj.sucursal_nombre,
-        fecha: cj.fecha,
-        horaApertura: cj.hora_apertura,
-        montoInicial: cj.monto_inicial || 0,
+  };
+
+  const handleAbrirCaja = async function(montoInicial) {
+    // Candado: si ya hay una apertura en curso, ignorar clics / Enter repetidos
+    if (abriendoRef.current) return;
+    abriendoRef.current = true;
+    setAbriendo(true);
+    try {
+      // Consulta liviana (solo cajas abiertas de esta sucursal)
+      var abiertas = await buscarCajasAbiertas(sesion.sucursal.id);
+
+      // 1) Ya tiene una caja abierta: retomarla (la que tenga ventas; si no, la mas reciente)
+      var propias = abiertas.filter(function(c) { return c.usuario_id === sesion.usuario.id; });
+      if (propias.length > 0) {
+        var elegida = propias[propias.length - 1];
+        if (propias.length > 1) {
+          var ids = propias.map(function(c) { return c.id; });
+          var rv = await supabase.from('ventas').select('caja_id').in('caja_id', ids);
+          var conVentas = {};
+          ((rv && rv.data) || []).forEach(function(v) { conVentas[v.caja_id] = (conVentas[v.caja_id] || 0) + 1; });
+          var mejor = null;
+          propias.forEach(function(c) { if (conVentas[c.id] && (!mejor || conVentas[c.id] >= conVentas[mejor.id])) mejor = c; });
+          if (mejor) elegida = mejor;
+        }
+        setCajaActiva(cajaDesdeFila(elegida));
+        return;
+      }
+
+      // 2) Otra persona tiene la caja abierta
+      var otra = abiertas[0];
+      if (otra) {
+        alert("Hay una caja abierta por " + otra.usuario_nombre + ". Pedile que cierre su caja primero.");
+        return;
+      }
+
+      // 3) Aviso si ya cerro una caja hoy (evita cerrar y volver a abrir por error)
+      var cerradaHoy = await buscarCajaCerradaHoy(sesion.sucursal.id, sesion.usuario.id, hoy());
+      if (cerradaHoy) {
+        var seguir = window.confirm("Ya cerraste una caja hoy (" + cerradaHoy.hora_apertura + " a " + cerradaHoy.hora_cierre + ").\n\n¿Querés abrir una caja NUEVA igualmente?");
+        if (!seguir) return;
+      }
+
+      // 4) Crear caja nueva
+      var nuevaCajaData = {
+        usuario_id: sesion.usuario.id,
+        usuario_nombre: sesion.usuario.nombre,
+        sucursal_id: sesion.sucursal.id,
+        sucursal_nombre: sesion.sucursal.nombre,
+        fecha: hoy(),
+        hora_apertura: ahora(),
+        hora_cierre: null,
+        monto_inicial: montoInicial || 0,
         cerrada: false,
       };
-      setData(function(prev) { return { ...prev, cajas: [...prev.cajas, cj] }; });
-      setCajaActiva(nuevaCaja);
+      var res = await supabase.from('cajas').insert(nuevaCajaData).select().single();
+      if (res.error || !res.data) {
+        // Si fallo por indice unico (otra apertura simultanea), retomar la que quedo abierta
+        var abiertas2 = [];
+        try { abiertas2 = await buscarCajasAbiertas(sesion.sucursal.id); } catch (e2) {}
+        var mia = abiertas2.find(function(c) { return c.usuario_id === sesion.usuario.id; });
+        if (mia) { setCajaActiva(cajaDesdeFila(mia)); return; }
+        alert("No se pudo abrir la caja. Revisá la conexión e intentá de nuevo.\n\n" + ((res.error && res.error.message) || ""));
+        return;
+      }
+      var cj = res.data;
+      setData(function(prev) {
+        return { ...prev, cajas: [...prev.cajas, { ...cj, usuarioNombre: cj.usuario_nombre, sucursalNombre: cj.sucursal_nombre, horaApertura: cj.hora_apertura, horaCierre: cj.hora_cierre, montoInicial: cj.monto_inicial || 0, sucursalId: cj.sucursal_id, usuarioId: cj.usuario_id }] };
+      });
+      setCajaActiva(cajaDesdeFila(cj));
+    } catch (e) {
+      console.error("Error abriendo caja:", e);
+      alert("No se pudo abrir la caja: " + ((e && e.message) || e));
+    } finally {
+      abriendoRef.current = false;
+      setAbriendo(false);
     }
   };
 
@@ -6641,6 +6998,6 @@ export default function App() {
 
   if (!sesion) return <Login data={data} onLogin={handleLogin} />;
   if (sesion.usuario.rol === "admin") return <Admin data={data} setData={setData} onLogout={handleLogout} />;
-  if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} data={data} />;
+  if (!cajaActiva) return <AperturaCaja sesion={sesion} onAbrir={handleAbrirCaja} data={data} abriendo={abriendo} />;
   return <POS data={data} setData={setData} sesion={sesion} caja={cajaActiva} onCerrarCaja={handleCerrarCaja} onLogout={handleLogout} />;
 }
