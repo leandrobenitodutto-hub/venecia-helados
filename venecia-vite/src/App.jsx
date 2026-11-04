@@ -6852,36 +6852,51 @@ export default function App() {
     return function() { clearInterval(interval); };
   }, [cajaActiva]);
 
+  const [entrando, setEntrando] = useState(false);
+
+  // Entre varias cajas propias abiertas, elige la que tiene ventas (si no, la mas reciente)
+  const elegirCajaPropia = async function(propias) {
+    var elegida = propias[propias.length - 1];
+    if (propias.length > 1) {
+      var ids = propias.map(function(c) { return c.id; });
+      var rv = await supabase.from('ventas').select('caja_id').in('caja_id', ids);
+      var conVentas = {};
+      ((rv && rv.data) || []).forEach(function(v) { conVentas[v.caja_id] = (conVentas[v.caja_id] || 0) + 1; });
+      var mejor = null;
+      propias.forEach(function(c) { if (conVentas[c.id] && (!mejor || conVentas[c.id] >= conVentas[mejor.id])) mejor = c; });
+      if (mejor) elegida = mejor;
+    }
+    return elegida;
+  };
+
   const handleLogin = async function(s) {
-    setSesion(s);
-    // Siempre cargar datos frescos al loguearse
-    var datosActuales = await cargarDatos();
-    setData(datosActuales);
-    // Buscar caja abierta para este usuario en esta sucursal
-    if (s.usuario.rol !== "admin") {
-      var cajaExistente = datosActuales.cajas.find(function(c) {
-        return (c.cerrada === false || c.cerrada === null || c.cerrada === 0)
-          && c.usuario_id === s.usuario.id
-          && c.sucursal_id === s.sucursal.id;
-      });
-      if (cajaExistente) {
-        if (cajaExistente.fecha && cajaExistente.fecha !== hoy()) {
-          alert("Atención: tenés una caja abierta desde el " + cajaExistente.fecha + " (" + cajaExistente.hora_apertura + "). Si es de un turno anterior, cerrala y abrí una nueva.");
+    // Se espera a tener datos y caja resueltos ANTES de mostrar nada.
+    // Antes la pantalla de apertura aparecia enseguida y, si la empleada abria caja mientras
+    // cargaban los datos, el login terminaba despues y la devolvia a "Apertura de caja".
+    if (entrando) return;
+    setEntrando(true);
+    try {
+      var datosActuales = await cargarDatos();
+      setData(datosActuales);
+      if (s.usuario.rol !== "admin") {
+        var abiertas = await buscarCajasAbiertas(s.sucursal.id);
+        var propias = abiertas.filter(function(c) { return c.usuario_id === s.usuario.id; });
+        if (propias.length > 0) {
+          var cajaExistente = await elegirCajaPropia(propias);
+          if (cajaExistente.fecha && cajaExistente.fecha !== hoy()) {
+            alert("Atención: tenés una caja abierta desde el " + cajaExistente.fecha + " (" + cajaExistente.hora_apertura + "). Si es de un turno anterior, cerrala y abrí una nueva.");
+          }
+          setCajaActiva(cajaDesdeFila(cajaExistente));
+        } else {
+          setCajaActiva(null);
         }
-        setCajaActiva({
-          id: cajaExistente.id,
-          usuarioId: cajaExistente.usuario_id,
-          usuarioNombre: cajaExistente.usuario_nombre,
-          sucursalId: cajaExistente.sucursal_id,
-          sucursalNombre: cajaExistente.sucursal_nombre,
-          fecha: cajaExistente.fecha,
-          horaApertura: cajaExistente.hora_apertura,
-          montoInicial: cajaExistente.monto_inicial || 0,
-          cerrada: false,
-        });
-      } else {
-        setCajaActiva(null);
       }
+      setSesion(s);
+    } catch (e) {
+      console.error("Error al iniciar sesion:", e);
+      alert("No se pudo cargar el sistema. Revisá la conexión e intentá de nuevo.");
+    } finally {
+      setEntrando(false);
     }
   };
 
@@ -6914,17 +6929,7 @@ export default function App() {
       // 1) Ya tiene una caja abierta: retomarla (la que tenga ventas; si no, la mas reciente)
       var propias = abiertas.filter(function(c) { return c.usuario_id === sesion.usuario.id; });
       if (propias.length > 0) {
-        var elegida = propias[propias.length - 1];
-        if (propias.length > 1) {
-          var ids = propias.map(function(c) { return c.id; });
-          var rv = await supabase.from('ventas').select('caja_id').in('caja_id', ids);
-          var conVentas = {};
-          ((rv && rv.data) || []).forEach(function(v) { conVentas[v.caja_id] = (conVentas[v.caja_id] || 0) + 1; });
-          var mejor = null;
-          propias.forEach(function(c) { if (conVentas[c.id] && (!mejor || conVentas[c.id] >= conVentas[mejor.id])) mejor = c; });
-          if (mejor) elegida = mejor;
-        }
-        setCajaActiva(cajaDesdeFila(elegida));
+        setCajaActiva(cajaDesdeFila(await elegirCajaPropia(propias)));
         return;
       }
 
@@ -6989,7 +6994,7 @@ export default function App() {
     setCajaActiva(null);
   };
 
-  if (cargando) return (
+  if (cargando || entrando) return (
     <div style={{ minHeight:"100vh", background:"#5B2D8E", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
       <div style={{ fontSize:60 }}>🍦</div>
       <div style={{ color:"white", fontSize:20, fontFamily:"sans-serif", fontWeight:700 }}>Cargando Venecia...</div>
