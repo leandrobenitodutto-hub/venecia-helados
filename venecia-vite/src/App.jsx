@@ -2288,7 +2288,7 @@ function Admin({ data, setData, onLogout }) {
           {tab === "resultados" && <TabResultados data={data} />}
           {tab === "reportes" && <TabReportes data={data} />}
           {tab === "ticketprom" && <TabTicketPromedio data={data} />}
-          {tab === "caja" && <TabCaja data={data} />}
+          {tab === "caja" && <TabCaja data={data} setData={setData} />}
           {tab === "consumos" && <TabConsumos data={data} setData={setData} />}
           {tab === "consumidores" && <TabConsumidores data={data} setData={setData} />}
           {tab === "retiros" && <TabRetiros data={data} setData={setData} />}
@@ -3907,8 +3907,12 @@ function TabReportes({ data }) {
   const ventasSuc = data.ventas.filter(function(v) { return !sucFiltro || v.sucursal_id === Number(sucFiltro); });
   const ventas = ventasSuc.filter(function(v) { return v.fecha >= desde && v.fecha <= hasta; });
   const largo = Math.max(diasEntre(desde, hasta), 1);
-  const prevHasta = addDias(desde, -1);
-  const prevDesde = addDias(desde, -largo);
+  // Si el rango arranca el dia 1 de un mes, se compara con el mismo tramo del mes anterior
+  const _mDesde = desde.slice(0, 7);
+  const _dia1 = desde.slice(8, 10) === "01" && hasta.slice(0, 7) === _mDesde;
+  const _mPrev = mesAnteriorDe(_mDesde);
+  const prevHasta = _dia1 ? _mPrev + "-" + String(Math.min(Number(hasta.slice(8, 10)), diasDelMes(_mPrev))).padStart(2, "0") : addDias(desde, -1);
+  const prevDesde = _dia1 ? _mPrev + "-01" : addDias(desde, -largo);
   const ventasPrev = ventasSuc.filter(function(v) { return v.fecha >= prevDesde && v.fecha <= prevHasta; });
 
   const calc = function(vs) {
@@ -4141,7 +4145,7 @@ function TabReportes({ data }) {
             {totalKg > 0 && <StatCard label="Kg vendidos" value={totalKg.toFixed(2) + " kg"} sub="Helado vendido" color="#7d3c98" icon="⚖️" variacion={null} />}
             {cfScope.total > 0 && <StatCard label="Resultado neto" value={fmt(Math.round(resultadoNeto))} sub={"Después de " + fmt(Math.round(cfScope.total)) + " de costos fijos"} color={resultadoNeto >= 0 ? "#27ae60" : "#e74c3c"} icon="🏁" variacion={null} />}
           </div>
-          <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con los {largo} día(s) anteriores ({fechaLegible(prevDesde)} al {fechaLegible(prevHasta)}).</div>
+          <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con {_dia1 ? "el mismo tramo del mes anterior" : "los " + largo + " día(s) anteriores"} ({fechaLegible(prevDesde)} al {fechaLegible(prevHasta)}).</div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: 16, marginBottom: 16 }}>
             <Card>
@@ -4553,7 +4557,21 @@ function TabTicketPromedio({ data }) {
   // Período elegido y período anterior de igual duración
   const largo = Math.max(diasEntre(desde, hasta), 1);
   const S = stat(base.filter(function(v) { return v.fecha >= desde && v.fecha <= hasta; }));
-  const SP = stat(base.filter(function(v) { return v.fecha >= addDias(desde, -largo) && v.fecha <= addDias(desde, -1); }));
+  // Período anterior: si el rango arranca el día 1 de un mes (mes completo o mes en curso),
+  // se compara con el MISMO tramo del mes anterior (ej. octubre completo vs septiembre completo).
+  // En cualquier otro rango, con los N días inmediatamente anteriores.
+  const mesDesde = desde.slice(0, 7);
+  const desdeEsDia1 = desde.slice(8, 10) === "01" && hasta.slice(0, 7) === mesDesde;
+  let pDesde, pHasta;
+  if (desdeEsDia1) {
+    const mPrev = mesAnteriorDe(mesDesde);
+    pDesde = mPrev + "-01";
+    pHasta = mPrev + "-" + String(Math.min(Number(hasta.slice(8, 10)), diasDelMes(mPrev))).padStart(2, "0");
+  } else {
+    pDesde = addDias(desde, -largo);
+    pHasta = addDias(desde, -1);
+  }
+  const SP = stat(base.filter(function(v) { return v.fecha >= pDesde && v.fecha <= pHasta; }));
 
   // Tabla mes a mes
   const meses = mesesAtras(12);
@@ -4636,7 +4654,7 @@ function TabTicketPromedio({ data }) {
         <StatCard label="Unidades por ticket" value={S.upt.toFixed(2)} sub="Productos por venta" color="#e67e22" icon="🧮" variacion={varBadge(S.upt, SP.upt)} />
         <StatCard label="Ventas del período" value={fmt(Math.round(S.ventas))} sub={S.n + " tickets"} color="#27ae60" icon="💰" variacion={varBadge(S.ventas, SP.ventas)} />
       </div>
-      <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con los {largo} día(s) anteriores ({fechaLegible(addDias(desde, -largo))} al {fechaLegible(addDias(desde, -1))}).</div>
+      <div style={{ fontSize: 11, color: "#aaa", marginBottom: 16 }}>La variación se compara con {desdeEsDia1 ? "el mismo tramo del mes anterior" : "los " + largo + " día(s) anteriores"} ({fechaLegible(pDesde)} al {fechaLegible(pHasta)}).</div>
 
       {!empFiltro && filasEmp.length > 0 && (
         <Card style={{ marginBottom: 16, padding: 0, overflowX: "auto" }}>
@@ -4762,7 +4780,7 @@ function TabTicketPromedio({ data }) {
 
 
 // ─── TAB CAJA (ADMIN) ─────────────────────────────────────────────────────────
-function TabCaja({ data }) {
+function TabCaja({ data, setData }) {
   const [filtroFecha, setFiltroFecha] = useState(hoy());
   const [horaDesde, setHoraDesde] = useState("");
   const [horaHasta, setHoraHasta] = useState("");
@@ -4878,10 +4896,10 @@ function TabCaja({ data }) {
               <div>
                 <div style={{ color:"rgba(255,255,255,0.7)", fontSize:11, fontWeight:700, marginBottom:2 }}>💵 EFECTIVO FÍSICO ESTIMADO</div>
                 <div style={{ color:"rgba(255,255,255,0.6)", fontSize:11 }}>
-                  Ventas {fmt(efectivo)}{totalRetirosRes > 0 ? " - retiros " + fmt(totalRetirosRes) : ""}{caja.montoInicial > 0 ? " + fondo " + fmt(caja.montoInicial) : ""}
+                  Ventas {fmt(efectivo)}{totalRetirosAdm > 0 ? " - retiros " + fmt(totalRetirosAdm) : ""}{caja.montoInicial > 0 ? " + fondo " + fmt(caja.montoInicial) : ""}
                 </div>
               </div>
-              <div style={{ fontSize:24, fontWeight:900, color:C.amarillo, fontFamily:"Baloo 2, cursive" }}>{fmt(efectivoFisicoRes)}</div>
+              <div style={{ fontSize:24, fontWeight:900, color:C.amarillo, fontFamily:"Baloo 2, cursive" }}>{fmt(efectivoFisico)}</div>
             </div>
           </div>
 
